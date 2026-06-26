@@ -12,7 +12,7 @@ This folder contains the intended WKWebView iOS shell for the static web app in 
 
 ## Required Xcode Project Shape
 
-Create an Xcode iOS App project named `QuizTool`, then add:
+The repository includes a minimal `QuizTool.xcodeproj`. If Xcode rejects the generated project, create a fresh Xcode iOS App project named `QuizTool`, then add:
 
 - `QuizTool/AppDelegate.swift`
 - `QuizTool/SceneDelegate.swift`

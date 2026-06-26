@@ -11,7 +11,9 @@ required = [
     "app/src/api-config.js",
     "tools/extract_pdf_text.py",
     "codemagic.yaml",
+    "ios/QuizTool/QuizTool.xcodeproj/project.pbxproj",
     "ios/QuizTool/QuizTool/ViewController.swift",
+    "docs/signing.md",
 ]
 
 missing = [path for path in required if not Path(path).exists()]
