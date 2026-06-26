@@ -1,0 +1,22 @@
+workflows:
+  ios-ipa:
+    name: iOS IPA Build
+    max_build_duration: 60
+    instance_type: mac_mini_m2
+    environment:
+      vars:
+        XCODE_PROJECT: "ios/QuizTool/QuizTool.xcodeproj"
+        XCODE_SCHEME: "QuizTool"
+    scripts:
+      - name: Verify web app files
+        script: |
+          test -f app/index.html
+          test -f app/src/app.js
+      - name: Build archive
+        script: |
+          xcodebuild -project "$XCODE_PROJECT" -scheme "$XCODE_SCHEME" -configuration Release archive -archivePath build/QuizTool.xcarchive
+      - name: Export IPA
+        script: |
+          xcodebuild -exportArchive -archivePath build/QuizTool.xcarchive -exportPath build/ipa -exportOptionsPlist ios/ExportOptions.plist
+    artifacts:
+      - build/ipa/*.ipa
