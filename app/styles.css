@@ -224,6 +224,27 @@ button {
   font-size: 24px;
 }
 
+.paper-cell {
+  align-items: flex-start;
+}
+
+.mini-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.mini-btn {
+  min-height: 34px;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(0, 122, 255, 0.12);
+  color: var(--blue);
+  font-size: 13px;
+  font-weight: 720;
+}
+
 .bottom-tabs {
   position: fixed;
   left: 50%;

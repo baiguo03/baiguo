@@ -1,7 +1,7 @@
 import { loadApiConfig, saveApiConfig, testApiConnection } from "./api-config.js";
 import { QUESTION_TYPES, createId } from "./models.js";
 import { parseQuestionText } from "./parser.js";
-import { checkAnswer, createAnswerRecord } from "./quiz-engine.js";
+import { buildPracticeOrder, checkAnswer, createAnswerRecord, shouldAutoAdvance } from "./quiz-engine.js";
 import { sampleQuestions } from "./sample-data.js";
 import { clearStore, exportBackup, getAllItems, saveItem, saveItems } from "./storage.js";
 
@@ -15,10 +15,13 @@ const state = {
   parsedQuestions: [],
   parsedWarnings: [],
   activePaperId: null,
+  activeQuestionIds: [],
   activeIndex: 0,
+  practiceMode: "sequential",
   selectedAnswer: null,
   result: null,
   notice: "",
+  autoAdvanceTimer: null,
 };
 
 function iconForType(type) {
@@ -63,6 +66,7 @@ async function init() {
 }
 
 function navigate(view) {
+  clearAutoAdvance();
   state.view = view;
   state.notice = "";
   render();
@@ -74,7 +78,15 @@ function currentPaper() {
 
 function questionsForPaper(paper) {
   if (!paper) return [];
-  return paper.questionIds.map((id) => state.questions.find((question) => question.id === id)).filter(Boolean);
+  const ids = state.activeQuestionIds.length && paper.id === state.activePaperId ? state.activeQuestionIds : paper.questionIds;
+  return ids.map((id) => state.questions.find((question) => question.id === id)).filter(Boolean);
+}
+
+function clearAutoAdvance() {
+  if (state.autoAdvanceTimer) {
+    window.clearTimeout(state.autoAdvanceTimer);
+    state.autoAdvanceTimer = null;
+  }
 }
 
 function page(title, subtitle, body) {
@@ -121,14 +133,17 @@ function renderLibrary() {
     .map((paper, index) => {
       const count = paper.questionIds.length;
       return `
-        <button class="cell" data-start-paper="${paper.id}">
+        <div class="cell paper-cell">
           <div class="tile-icon ${colorForIndex(index)}">卷</div>
           <div class="cell-main">
             <div class="cell-title">${paper.title}</div>
             <div class="cell-sub">${count} 题 · ${paper.mode === "exam" ? "模拟考试" : "练习模式"}</div>
+            <div class="mini-actions">
+              <button class="mini-btn" data-start-paper="${paper.id}" data-practice-mode="sequential">顺序练习</button>
+              <button class="mini-btn" data-start-paper="${paper.id}" data-practice-mode="random">随机练习</button>
+            </div>
           </div>
-          <div class="chev">›</div>
-        </button>
+        </div>
       `;
     })
     .join("");
@@ -257,7 +272,7 @@ function renderPractice() {
 
   return page(
     "练习",
-    `${paper?.title || "练习"} · ${state.activeIndex + 1} / ${questions.length}`,
+    `${paper?.title || "练习"} · ${state.practiceMode === "random" ? "随机练习" : "顺序练习"} · ${state.activeIndex + 1} / ${questions.length}`,
     `
       <section class="question-card">
         <div class="question-meta">
@@ -389,11 +404,7 @@ function bindEvents() {
 
   app.querySelectorAll("[data-start-paper]").forEach((button) => {
     button.addEventListener("click", () => {
-      state.activePaperId = button.dataset.startPaper;
-      state.activeIndex = 0;
-      state.selectedAnswer = null;
-      state.result = null;
-      navigate("practice");
+      startPractice(button.dataset.startPaper, button.dataset.practiceMode || "sequential");
     });
   });
 
@@ -476,8 +487,22 @@ async function publishPaper() {
   state.parsedQuestions = [];
   state.parsedWarnings = [];
   state.activePaperId = paper.id;
+  state.activeQuestionIds = [];
   setNotice("已发布试卷");
   navigate("library");
+}
+
+function startPractice(paperId, mode = "sequential") {
+  const paper = state.papers.find((entry) => entry.id === paperId);
+  if (!paper) return;
+  clearAutoAdvance();
+  state.activePaperId = paper.id;
+  state.activeQuestionIds = buildPracticeOrder(paper.questionIds, mode);
+  state.practiceMode = mode;
+  state.activeIndex = 0;
+  state.selectedAnswer = null;
+  state.result = null;
+  navigate("practice");
 }
 
 function selectAnswer(answer) {
@@ -513,9 +538,15 @@ async function submitAnswer() {
     state.reviewItems = await getAllItems("reviewItems");
   }
   render();
+  if (shouldAutoAdvance(record, question) && state.activeIndex < questions.length - 1) {
+    state.autoAdvanceTimer = window.setTimeout(() => {
+      moveQuestion(1);
+    }, 850);
+  }
 }
 
 function moveQuestion(delta) {
+  clearAutoAdvance();
   const count = questionsForPaper(currentPaper()).length;
   state.activeIndex = Math.max(0, Math.min(count - 1, state.activeIndex + delta));
   state.selectedAnswer = null;

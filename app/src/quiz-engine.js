@@ -24,3 +24,20 @@ export function createAnswerRecord(question, userAnswer, elapsedSeconds = 0) {
     answeredAt: new Date().toISOString(),
   };
 }
+
+export function buildPracticeOrder(questionIds, mode = "sequential", random = Math.random) {
+  const ids = [...questionIds];
+  if (mode !== "random") return ids;
+
+  for (let index = ids.length - 1; index > 0; index -= 1) {
+    const swapIndex = Math.floor(random() * (index + 1));
+    [ids[index], ids[swapIndex]] = [ids[swapIndex], ids[index]];
+  }
+  return ids;
+}
+
+export function shouldAutoAdvance(record, question) {
+  if (!record || !question) return false;
+  if (question.type === "short") return false;
+  return record.correct === true;
+}
