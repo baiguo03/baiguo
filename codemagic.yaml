@@ -17,12 +17,31 @@ workflows:
           test -f app/src/app.js
       - name: Set up code signing settings
         script: |
-          xcode-project use-profiles
+          xcode-project use-profiles \
+            --project "$XCODE_PROJECT" \
+            --archive-method ad-hoc \
+            --export-options-plist "$HOME/export_options.plist" \
+            --code-signing-setup-verbose-logging
+          cat "$HOME/export_options.plist"
       - name: Build archive
         script: |
           xcodebuild -project "$XCODE_PROJECT" -scheme "$XCODE_SCHEME" -configuration Release archive -archivePath build/QuizTool.xcarchive
       - name: Export IPA
         script: |
-          xcodebuild -exportArchive -archivePath build/QuizTool.xcarchive -exportPath build/ipa -exportOptionsPlist ios/ExportOptions.plist
+          echo "Available provisioning profiles before export:"
+          find "$HOME/Library" -name "*.mobileprovision" -print || true
+          mkdir -p "$HOME/Library/MobileDevice/Provisioning Profiles"
+          PROFILE_SOURCE=$(find "$HOME/Library" -name "d6963832-1597-4156-ba23-e0cc7ee4861e.mobileprovision" -print -quit)
+          if [ -z "$PROFILE_SOURCE" ]; then
+            PROFILE_SOURCE=$(find "$HOME/Library" -name "*.mobileprovision" -print -quit)
+          fi
+          if [ -z "$PROFILE_SOURCE" ]; then
+            echo "No provisioning profile found under $HOME/Library"
+            exit 1
+          fi
+          echo "Copying provisioning profile from $PROFILE_SOURCE"
+          cp "$PROFILE_SOURCE" "$HOME/Library/MobileDevice/Provisioning Profiles/d6963832-1597-4156-ba23-e0cc7ee4861e.mobileprovision"
+          ls -la "$HOME/Library/MobileDevice/Provisioning Profiles"
+          xcodebuild -exportArchive -archivePath build/QuizTool.xcarchive -exportPath build/ipa -exportOptionsPlist "$HOME/export_options.plist"
     artifacts:
       - build/ipa/*.ipa
