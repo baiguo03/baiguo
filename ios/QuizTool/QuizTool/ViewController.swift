@@ -3,10 +3,22 @@ import PDFKit
 import UniformTypeIdentifiers
 
 final class ViewController: UIViewController, UIDocumentPickerDelegate, UIGestureRecognizerDelegate {
-    private struct Paper {
+    private struct Paper: Codable {
         let title: String
         let source: String
         let questions: [Question]
+    }
+
+    private struct AppState: Codable {
+        let papers: [Paper]
+        let activePaperIndex: Int
+        let wrongQuestions: [Question]
+        let currentIndex: Int
+        let modeTitle: String
+        let autoNextEnabled: Bool
+        let shuffleOptionsEnabled: Bool
+        let apiEndpoint: String
+        let apiKey: String
     }
 
     private enum Page: Int {
@@ -35,6 +47,7 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate, UIGestur
     private let scrollView = UIScrollView()
     private let contentStack = UIStackView()
     private let tabStack = UIStackView()
+    private let storageKey = "YuntiV11AppState"
     private var panStartOffset: CGPoint = .zero
     private var importTextView: UITextView?
     private var searchResultsStack: UIStackView?
@@ -72,9 +85,8 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate, UIGestur
         super.viewDidLoad()
         overrideUserInterfaceStyle = .light
         view.backgroundColor = appBackgroundColor
-        apiEndpoint = UserDefaults.standard.string(forKey: "apiEndpoint") ?? ""
-        apiKey = UserDefaults.standard.string(forKey: "apiKey") ?? ""
         configureSeedData()
+        loadPersistedState()
         configureLayout()
         configureSwipeGestures()
         render(animated: false)
@@ -111,6 +123,42 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate, UIGestur
         )
         papers = [sample]
         order = Array(sample.questions.indices)
+    }
+
+    private func loadPersistedState() {
+        guard
+            let data = UserDefaults.standard.data(forKey: storageKey),
+            let state = try? JSONDecoder().decode(AppState.self, from: data),
+            !state.papers.isEmpty
+        else { return }
+        papers = state.papers
+        activePaperIndex = min(max(state.activePaperIndex, 0), papers.count - 1)
+        wrongQuestions = state.wrongQuestions
+        currentIndex = max(state.currentIndex, 0)
+        modeTitle = state.modeTitle
+        autoNextEnabled = state.autoNextEnabled
+        shuffleOptionsEnabled = state.shuffleOptionsEnabled
+        apiEndpoint = state.apiEndpoint
+        apiKey = state.apiKey
+        let maxIndex = max(activeQuestions.count - 1, 0)
+        currentIndex = min(currentIndex, maxIndex)
+        order = activeQuestions.isEmpty ? [] : Array(activeQuestions.indices)
+    }
+
+    private func savePersistedState() {
+        let state = AppState(
+            papers: papers,
+            activePaperIndex: activePaperIndex,
+            wrongQuestions: wrongQuestions,
+            currentIndex: currentIndex,
+            modeTitle: modeTitle,
+            autoNextEnabled: autoNextEnabled,
+            shuffleOptionsEnabled: shuffleOptionsEnabled,
+            apiEndpoint: apiEndpoint,
+            apiKey: apiKey
+        )
+        guard let data = try? JSONEncoder().encode(state) else { return }
+        UserDefaults.standard.set(data, forKey: storageKey)
     }
 
     private func configureLayout() {
@@ -153,7 +201,7 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate, UIGestur
         scrollView.addGestureRecognizer(pan)
     }
 
-    private func render(animated: Bool = true) {
+    private func render(animated: Bool = false) {
         let changes = {
             self.clearStack(self.contentStack)
             self.renderTabs()
@@ -184,6 +232,11 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate, UIGestur
         } else {
             changes()
         }
+    }
+
+    private func setPage(_ nextPage: Page, animated: Bool = false) {
+        page = nextPage
+        render(animated: animated)
     }
 
     private func renderTabs() {
@@ -833,38 +886,31 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate, UIGestur
         autoTimer?.invalidate()
         feedbackText = nil
         focusedPracticeQuestions = nil
-        page = Page(rawValue: sender.tag) ?? .home
-        render()
+        setPage(Page(rawValue: sender.tag) ?? .home, animated: false)
     }
 
     @objc private func openSearchPage() {
-        page = .search
-        render()
+        setPage(.search, animated: false)
     }
 
     @objc private func openImportPage() {
-        page = .importText
-        render()
+        setPage(.importText, animated: false)
     }
 
     @objc private func openAPIConfig() {
-        page = .apiConfig
-        render()
+        setPage(.apiConfig, animated: false)
     }
 
     @objc private func openPracticeMode() {
-        page = .practiceMode
-        render()
+        setPage(.practiceMode, animated: false)
     }
 
     @objc private func backToProfile() {
-        page = .profile
-        render()
+        setPage(.profile, animated: false)
     }
 
     @objc private func backToLibrary() {
-        page = .library
-        render()
+        setPage(.library, animated: false)
     }
 
     @objc private func searchChanged(_ sender: UITextField) {
@@ -877,10 +923,10 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate, UIGestur
         apiKey = apiKeyField?.text?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         UserDefaults.standard.set(apiEndpoint, forKey: "apiEndpoint")
         UserDefaults.standard.set(apiKey, forKey: "apiKey")
+        savePersistedState()
         feedbackText = "\u{914d}\u{7f6e}\u{5df2}\u{4fdd}\u{5b58}"
         feedbackIsPositive = true
-        page = .profile
-        render()
+        setPage(.profile, animated: false)
     }
 
     @objc private func selectSequentialMode() {
@@ -919,14 +965,13 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate, UIGestur
         currentIndex = 0
         selectedAnswers.removeAll()
         feedbackText = nil
-        page = .practice
-        render()
+        savePersistedState()
+        setPage(.practice, animated: false)
     }
 
     @objc private func startWrongPractice() {
         guard !wrongQuestions.isEmpty else {
-            page = .wrong
-            render()
+            setPage(.wrong, animated: false)
             return
         }
         focusedPracticeQuestions = wrongQuestions
@@ -936,8 +981,7 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate, UIGestur
         currentIndex = 0
         selectedAnswers.removeAll()
         feedbackText = nil
-        page = .practice
-        render()
+        setPage(.practice, animated: false)
     }
 
     @objc private func answerTapped(_ sender: UIButton) {
@@ -961,14 +1005,17 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate, UIGestur
             } else {
                 feedbackText = "\u{7b54}\u{5bf9}\u{4e86}"
                 feedbackIsPositive = true
+                savePersistedState()
                 render()
             }
         } else {
             if !wrongQuestions.contains(where: { $0.prompt == question.prompt }) {
                 wrongQuestions.append(question)
+                savePersistedState()
             }
             feedbackText = "\u{7b54}\u{9519}\u{4e86}\u{ff1a}\(question.explanation)"
             feedbackIsPositive = false
+            savePersistedState()
             render()
         }
     }
@@ -977,6 +1024,7 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate, UIGestur
         guard currentIndex < order.count - 1 else {
             feedbackText = "\u{5df2}\u{5b8c}\u{6210}\u{672c}\u{7ec4}\u{7ec3}\u{4e60}"
             feedbackIsPositive = true
+            savePersistedState()
             render()
             return
         }
@@ -987,6 +1035,7 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate, UIGestur
             guard let self else { return }
             self.currentIndex += 1
             self.selectedAnswers.removeAll()
+            self.savePersistedState()
             self.renderSlideToNext()
         }
     }
@@ -1010,6 +1059,7 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate, UIGestur
         currentIndex = min(currentIndex + 1, order.count - 1)
         selectedAnswers.removeAll()
         feedbackText = nil
+        savePersistedState()
         page = .practice
         renderCalmQuestionChange()
     }
@@ -1019,6 +1069,7 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate, UIGestur
         currentIndex = max(currentIndex - 1, 0)
         selectedAnswers.removeAll()
         feedbackText = nil
+        savePersistedState()
         page = .practice
         renderCalmQuestionChange()
     }
@@ -1066,8 +1117,7 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate, UIGestur
         guard !parsed.isEmpty else {
             feedbackText = "\u{672a}\u{8bc6}\u{522b}\u{5230}\u{9898}\u{76ee}\u{ff0c}\u{8bf7}\u{68c0}\u{67e5}\u{683c}\u{5f0f}\u{3002}"
             feedbackIsPositive = false
-            page = .library
-            render()
+            setPage(.library, animated: false)
             return
         }
         let paper = Paper(title: title, source: source, questions: parsed)
@@ -1079,8 +1129,8 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate, UIGestur
         selectedAnswers.removeAll()
         feedbackText = "\u{5df2}\u{5bfc}\u{5165} \(parsed.count) \u{9898}"
         feedbackIsPositive = true
-        page = .library
-        render()
+        savePersistedState()
+        setPage(.library, animated: false)
     }
 
     @objc private func openFileImporter() {
@@ -1122,11 +1172,13 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate, UIGestur
 
     @objc private func clearWrongQuestions() {
         wrongQuestions.removeAll()
+        savePersistedState()
         render()
     }
 
     @objc private func autoNextChanged(_ sender: UISwitch) {
         autoNextEnabled = sender.isOn
+        savePersistedState()
         render()
     }
 
@@ -1135,6 +1187,7 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate, UIGestur
         optionOrders.removeAll()
         selectedAnswers.removeAll()
         feedbackText = nil
+        savePersistedState()
         render()
     }
 }

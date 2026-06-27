@@ -1,11 +1,11 @@
 import Foundation
 
-struct Option {
+struct Option: Codable {
     let key: String
     let text: String
 }
 
-struct Question {
+struct Question: Codable {
     let prompt: String
     let options: [Option]
     let answer: Set<String>
@@ -65,9 +65,17 @@ enum QuestionParser {
     private static func insertBreaksBeforeInlineQuestionStarts(_ text: String) -> String {
         let optionMarker = "\\s*A\\s*[\\.\\x{ff0e}\\x{3001}:\\x{ff1a}]"
         let pattern = "(\\s+)(\\d{1,3}[\\.\\x{3001}\\x{ff0e}]\\s*)(?=[^\\n]{0,180}\(optionMarker))"
-        guard let regex = try? NSRegularExpression(pattern: pattern) else { return text }
         let range = NSRange(text.startIndex..<text.endIndex, in: text)
-        return regex.stringByReplacingMatches(in: text, range: range, withTemplate: "\n$2")
+        var prepared = text
+        if let regex = try? NSRegularExpression(pattern: pattern) {
+            prepared = regex.stringByReplacingMatches(in: prepared, range: range, withTemplate: "\n$2")
+        }
+        let openPattern = "(\\s+)(\\d{1,3}[\\.\\x{3001}\\x{ff0e}]\\s*)(?=[^\\n]{0,120}(\u{586b}\u{7a7a}|\u{7b80}\u{7b54}|\u{914d}\u{4f0d}|____|\u{7b54}\u{6848}[\\x{ff1a}:]))"
+        if let regex = try? NSRegularExpression(pattern: openPattern) {
+            let openRange = NSRange(prepared.startIndex..<prepared.endIndex, in: prepared)
+            prepared = regex.stringByReplacingMatches(in: prepared, range: openRange, withTemplate: "\n$2")
+        }
+        return prepared
     }
 
     private static func isQuestionStart(_ line: String) -> Bool {
@@ -87,8 +95,22 @@ enum QuestionParser {
         let optionMatches = optionMarkerMatches(in: body)
 
         if optionMatches.isEmpty {
+            let prompt = cleanPrompt(body)
+            let isTrueFalse = isTrueFalseQuestion(prompt, answer: resolvedBlockAnswer)
+            let openAnswer = resolvedBlockAnswer.isEmpty ? extractFreeformAnswer(from: compact) : resolvedBlockAnswer.sorted().joined(separator: "、")
+            if !isTrueFalse {
+                return Question(
+                    prompt: prompt,
+                    options: [
+                        Option(key: "A", text: openAnswer.isEmpty ? "\u{67e5}\u{770b}\u{89e3}\u{6790}" : openAnswer)
+                    ],
+                    answer: Set(["A"]),
+                    explanation: explanation == "\u{6682}\u{65e0}\u{89e3}\u{6790}" && !openAnswer.isEmpty ? openAnswer : explanation,
+                    kind: inferOpenQuestionKind(prompt)
+                )
+            }
             return Question(
-                prompt: cleanPrompt(body),
+                prompt: prompt,
                 options: [
                     Option(key: "A", text: "\u{6b63}\u{786e}"),
                     Option(key: "B", text: "\u{9519}\u{8bef}")
@@ -200,6 +222,40 @@ enum QuestionParser {
             return "\u{6682}\u{65e0}\u{89e3}\u{6790}"
         }
         return value[labelRange.upperBound...].trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private static func extractFreeformAnswer(from value: String) -> String {
+        let labels = ["\u{6b63}\u{786e}\u{7b54}\u{6848}\u{ff1a}", "\u{6b63}\u{786e}\u{7b54}\u{6848}:", "\u{7b54}\u{6848}\u{ff1a}", "\u{7b54}\u{6848}:"]
+        guard let labelRange = firstRange(of: labels, in: value) else { return "" }
+        let explanationLabels = ["\u{89e3}\u{6790}\u{ff1a}", "\u{89e3}\u{6790}:"]
+        let suffix = String(value[labelRange.upperBound...])
+        if let explanationRange = firstRange(of: explanationLabels, in: suffix) {
+            return String(suffix[..<explanationRange.lowerBound]).trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        return suffix.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private static func inferOpenQuestionKind(_ prompt: String) -> String {
+        if prompt.contains("\u{914d}\u{4f0d}") || prompt.contains("\u{5339}\u{914d}") {
+            return "\u{914d}\u{4f0d}\u{9898}"
+        }
+        if prompt.contains("\u{7b80}\u{7b54}") || prompt.contains("\u{7b80}\u{8ff0}") || prompt.contains("\u{8bf7}\u{8ff0}") {
+            return "\u{7b80}\u{7b54}\u{9898}"
+        }
+        if prompt.contains("\u{586b}\u{7a7a}") || prompt.contains("____") || prompt.contains("\u{ff08}\u{ff09}") {
+            return "\u{586b}\u{7a7a}\u{9898}"
+        }
+        return "\u{7b80}\u{7b54}\u{9898}"
+    }
+
+    private static func isTrueFalseQuestion(_ prompt: String, answer: Set<String>) -> Bool {
+        if answer == Set(["A"]) || answer == Set(["B"]) {
+            return prompt.contains("\u{6b63}\u{786e}") ||
+                prompt.contains("\u{9519}\u{8bef}") ||
+                prompt.contains("\u{5224}\u{65ad}") ||
+                prompt.contains("\u{662f}\u{5426}")
+        }
+        return false
     }
 
     private static func removeSuffixLabels(from value: String) -> String {

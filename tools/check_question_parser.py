@@ -54,6 +54,11 @@ def split_question_blocks(text: str) -> list[str]:
         r"\n\2",
         text.strip(),
     )
+    text = re.sub(
+        r"(\s+)(\d{1,3}[\.\u3001\uff0e]\s*)(?=[^\n]{0,120}(\u586b\u7a7a|\u7b80\u7b54|\u914d\u4f0d|____|\u7b54\u6848[:\uff1a]))",
+        r"\n\2",
+        text,
+    )
     lines = [line.strip() for line in text.splitlines() if line.strip()]
     blocks: list[str] = []
     current: list[str] = []
@@ -80,6 +85,15 @@ sample = (
     "\u5224\u65ad\u9898\u7b54\u6848 3.\u9519"
 )
 
+open_question_sample = (
+    "1. \u586b\u7a7a\uff1a\u8840\u5c0f\u677f\u7684\u6b62\u8840\u529f\u80fd\u5305\u62ec____\u3002 "
+    "\u7b54\u6848\uff1a\u9ecf\u9644\u3001\u805a\u96c6\u3001\u91ca\u653e "
+    "2. \u7b80\u7b54\uff1a\u8bf7\u7b80\u8ff0\u51dd\u8840\u56e0\u5b50\u7684\u4f5c\u7528\u3002 "
+    "\u7b54\u6848\uff1a\u53c2\u4e0e\u51dd\u8840\u7011\u5e03\u53cd\u5e94 "
+    "3. \u914d\u4f0d\uff1a1-\u7f3a\u94c1\u8d2b 2-\u5de8\u5e7c\u8d2b "
+    "\u7b54\u6848\uff1a1-A 2-B"
+)
+
 blocks = split_question_blocks(sample)
 if len(blocks) != 2:
     raise SystemExit(f"expected 2 option blocks after stripping summary, got {len(blocks)}: {blocks!r}")
@@ -94,5 +108,9 @@ for block in blocks:
 summary = extract_answer_summary_answers(sample)
 if summary.get(1) != {"D"} or summary.get(2) != {"B"} or summary.get(3) != {"B"}:
     raise SystemExit(f"summary answers not normalized correctly: {summary!r}")
+
+open_blocks = split_question_blocks(open_question_sample)
+if len(open_blocks) != 3:
+    raise SystemExit(f"expected fill/short/matching questions to remain as blocks, got {len(open_blocks)}: {open_blocks!r}")
 
 print("question parser checks passed")
