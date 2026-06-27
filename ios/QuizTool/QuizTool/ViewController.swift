@@ -185,13 +185,12 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate, UIGestur
     }
 
     private func renderHome() {
-        addTitle("\u{4e91}\u{9898} V10", "\u{7ba1}\u{7406}\u{591a}\u{4efd}\u{8bd5}\u{9898}\u{ff0c}\u{70b9}\u{5f00}\u{9898}\u{5e93}\u{540e}\u{518d}\u{5f00}\u{59cb}\u{7ec3}\u{4e60}\u{3002}")
-        addStatsRow()
-        addSectionHeader("\u{5feb}\u{6377}\u{5165}\u{53e3}")
+        addTopBar(title: "\u{4e91}\u{9898} V10", chipTitle: "\u{5bfc}\u{5165}", action: #selector(openImportPage))
+        addSearchField()
         addListGroup([
-            row("\u{6700}\u{8fd1}\u{9898}\u{5e93}", subtitle: activePaper.title, action: #selector(openCurrentPaper)),
-            row("\u{5bfc}\u{5165}\u{65b0}\u{8bd5}\u{9898}", subtitle: "\u{7c98}\u{8d34}\u{6216}\u{9009}\u{62e9} TXT/PDF", action: #selector(openImportPage)),
-            row("\u{7ee7}\u{7eed}\u{7ec3}\u{4e60}", subtitle: "\(currentIndex + 1) / \(max(order.count, 1))", action: #selector(openCurrentPaper))
+            paperRow(activePaper, index: activePaperIndex),
+            row("\u{7ee7}\u{7eed}\u{7ec3}\u{4e60}", subtitle: "\(currentIndex + 1) / \(max(order.count, 1))", action: #selector(openCurrentPaper)),
+            row("\u{968f}\u{673a}\u{7ec3}\u{4e60}", subtitle: "\u{4ece}\u{5f53}\u{524d}\u{9898}\u{5e93}\u{6253}\u{4e71}\u{9898}\u{76ee}\u{987a}\u{5e8f}", action: #selector(openRandomPractice))
         ])
     }
 
@@ -250,9 +249,6 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate, UIGestur
             submit.addTarget(self, action: #selector(submitAnswer), for: .touchUpInside)
             contentStack.addArrangedSubview(submit)
         }
-        let hint = makeText("\u{4ece}\u{5c4f}\u{5e55}\u{5de6}\u{8fb9}\u{7f18}\u{6ed1}\u{52a8}\u{8fd4}\u{56de}\u{4e0a}\u{4e00}\u{9898}\u{ff0c}\u{53f3}\u{8fb9}\u{7f18}\u{6ed1}\u{52a8}\u{8fdb}\u{5165}\u{4e0b}\u{4e00}\u{9898}\u{3002}", size: 13, weight: .regular, color: .secondaryLabel)
-        hint.textAlignment = .center
-        contentStack.addArrangedSubview(hint)
     }
 
     private func renderWrong() {
@@ -288,7 +284,7 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate, UIGestur
     }
 
     private func addTopBar(title: String, chipTitle: String?, action: Selector?) {
-        let titleLabel = makeText(title, size: 25, weight: .bold)
+        let titleLabel = makeText(title, size: 22, weight: .bold)
         let spacer = UIView()
         let row = UIStackView(arrangedSubviews: [titleLabel, spacer])
         row.axis = .horizontal
@@ -308,7 +304,7 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate, UIGestur
     private func makeChip(_ title: String) -> UIButton {
         let button = UIButton(type: .system)
         button.setTitle(title, for: .normal)
-        button.titleLabel?.font = UIFont.systemFont(ofSize: 13, weight: .semibold)
+        button.titleLabel?.font = UIFont.systemFont(ofSize: 12, weight: .semibold)
         button.backgroundColor = cardBackgroundColor.withAlphaComponent(0.82)
         button.tintColor = UIColor.label
         button.layer.cornerRadius = 16
@@ -318,13 +314,23 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate, UIGestur
     }
 
     private func addPracticeMeta() {
-        let current = makeText("\(currentIndex + 1)", size: 22, weight: .bold)
-        let total = makeText("/ \(order.count)  \(activeQuestions[order[currentIndex]].kind)", size: 15, weight: .regular, color: .secondaryLabel)
-        let row = UIStackView(arrangedSubviews: [current, total])
-        row.axis = .horizontal
-        row.alignment = .firstBaseline
-        row.spacing = 6
-        contentStack.addArrangedSubview(row)
+        let text = "\(currentIndex + 1) / \(order.count)  \(activeQuestions[order[currentIndex]].kind)"
+        let attributed = NSMutableAttributedString(
+            string: text,
+            attributes: [
+                .font: UIFont.systemFont(ofSize: 15, weight: .regular),
+                .foregroundColor: UIColor.secondaryLabel
+            ]
+        )
+        let currentRange = NSRange(location: 0, length: "\(currentIndex + 1)".count)
+        attributed.addAttributes([
+            .font: UIFont.systemFont(ofSize: 20, weight: .bold),
+            .foregroundColor: UIColor.label
+        ], range: currentRange)
+        let label = UILabel()
+        label.attributedText = attributed
+        label.numberOfLines = 1
+        contentStack.addArrangedSubview(label)
     }
 
     private func addSectionHeader(_ text: String) {
@@ -365,8 +371,11 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate, UIGestur
         let labels = UIStackView(arrangedSubviews: [titleLabel, subtitleLabel])
         labels.axis = .vertical
         labels.spacing = 2
+        labels.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        let spacer = UIView()
         let arrow = makeText("\u{203a}", size: 24, weight: .regular, color: .tertiaryLabel)
-        let row = UIStackView(arrangedSubviews: [labels, arrow])
+        arrow.setContentHuggingPriority(.required, for: .horizontal)
+        let row = UIStackView(arrangedSubviews: [labels, spacer, arrow])
         row.axis = .horizontal
         row.alignment = .center
         row.spacing = 12
@@ -409,9 +418,12 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate, UIGestur
         let labels = UIStackView(arrangedSubviews: [titleLabel, subtitleLabel])
         labels.axis = .vertical
         labels.spacing = 3
+        labels.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        let spacer = UIView()
         let timeLabel = makeText(index == 0 ? "\u{4eca}\u{5929}" : "\u{6628}\u{5929}", size: 12, weight: .regular, color: .tertiaryLabel)
         timeLabel.textAlignment = .right
-        let row = UIStackView(arrangedSubviews: [badge, labels, timeLabel])
+        timeLabel.setContentHuggingPriority(.required, for: .horizontal)
+        let row = UIStackView(arrangedSubviews: [badge, labels, spacer, timeLabel])
         row.axis = .horizontal
         row.alignment = .center
         row.spacing = 12
@@ -453,8 +465,11 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate, UIGestur
         let labels = UIStackView(arrangedSubviews: [titleLabel, subtitleLabel])
         labels.axis = .vertical
         labels.spacing = 3
+        labels.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        let spacer = UIView()
         let arrow = makeText("\u{203a}", size: 20, weight: .regular, color: .tertiaryLabel)
-        let row = UIStackView(arrangedSubviews: [icon, labels, arrow])
+        arrow.setContentHuggingPriority(.required, for: .horizontal)
+        let row = UIStackView(arrangedSubviews: [icon, labels, spacer, arrow])
         row.axis = .horizontal
         row.alignment = .center
         row.spacing = 12
@@ -472,11 +487,14 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate, UIGestur
         let labels = UIStackView(arrangedSubviews: [titleLabel, subtitleLabel])
         labels.axis = .vertical
         labels.spacing = 3
+        labels.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         let toggle = UISwitch()
         toggle.onTintColor = accentColor
         toggle.isOn = isOn
         toggle.addTarget(self, action: action, for: .valueChanged)
-        let row = UIStackView(arrangedSubviews: [icon, labels, toggle])
+        toggle.setContentHuggingPriority(.required, for: .horizontal)
+        let spacer = UIView()
+        let row = UIStackView(arrangedSubviews: [icon, labels, spacer, toggle])
         row.axis = .horizontal
         row.alignment = .center
         row.spacing = 12
@@ -507,7 +525,7 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate, UIGestur
 
     private func addQuestionCard(_ question: Question) {
         let chip = makeText(question.kind, size: 13, weight: .bold, color: accentColor)
-        let prompt = makeText(question.prompt, size: 20, weight: .bold)
+        let prompt = makeText(question.prompt, size: 18, weight: .bold)
         addCard([chip, prompt])
     }
 
@@ -593,15 +611,46 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate, UIGestur
     }
 
     private func makeOptionButton(_ option: Option, displayKey: String, selected: Bool) -> UIButton {
-        let title = selected ? "\u{2713}  \(displayKey). \(option.text)" : "\(displayKey). \(option.text)"
-        let button = makeButton(title, style: .plain)
-        button.contentHorizontalAlignment = .left
+        let button = UIButton(type: .system)
         button.accessibilityIdentifier = option.key
         button.backgroundColor = selected ? softGreenColor : cardBackgroundColor
-        button.tintColor = selected ? accentColor : UIColor.label
+        button.tintColor = UIColor.label
         button.layer.borderWidth = selected ? 1 : 0.5
         button.layer.borderColor = selected ? accentColor.withAlphaComponent(0.32).cgColor : UIColor.separator.cgColor
         button.layer.cornerRadius = 17
+        button.contentHorizontalAlignment = .fill
+        button.contentVerticalAlignment = .fill
+
+        let letterLabel = UILabel()
+        letterLabel.text = displayKey
+        letterLabel.font = UIFont.systemFont(ofSize: 13, weight: .bold)
+        letterLabel.textAlignment = .center
+        letterLabel.textColor = selected ? UIColor.white : UIColor.label
+        letterLabel.backgroundColor = selected ? accentColor : UIColor.tertiarySystemFill
+        letterLabel.layer.cornerRadius = 13
+        letterLabel.clipsToBounds = true
+        letterLabel.translatesAutoresizingMaskIntoConstraints = false
+
+        let textLabel = UILabel()
+        textLabel.text = option.text
+        textLabel.font = UIFont.systemFont(ofSize: 16, weight: .semibold)
+        textLabel.textColor = selected ? accentColor : UIColor.label
+        textLabel.numberOfLines = 0
+        textLabel.translatesAutoresizingMaskIntoConstraints = false
+
+        button.addSubview(letterLabel)
+        button.addSubview(textLabel)
+        NSLayoutConstraint.activate([
+            button.heightAnchor.constraint(greaterThanOrEqualToConstant: 54),
+            letterLabel.leadingAnchor.constraint(equalTo: button.leadingAnchor, constant: 14),
+            letterLabel.centerYAnchor.constraint(equalTo: button.centerYAnchor),
+            letterLabel.widthAnchor.constraint(equalToConstant: 26),
+            letterLabel.heightAnchor.constraint(equalToConstant: 26),
+            textLabel.leadingAnchor.constraint(equalTo: letterLabel.trailingAnchor, constant: 12),
+            textLabel.trailingAnchor.constraint(equalTo: button.trailingAnchor, constant: -14),
+            textLabel.topAnchor.constraint(equalTo: button.topAnchor, constant: 12),
+            textLabel.bottomAnchor.constraint(equalTo: button.bottomAnchor, constant: -12)
+        ])
         return button
     }
 
@@ -674,6 +723,10 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate, UIGestur
         startPaper(index: activePaperIndex, random: false)
     }
 
+    @objc private func openRandomPractice() {
+        startPaper(index: activePaperIndex, random: true)
+    }
+
     @objc private func paperTapped(_ sender: UITapGestureRecognizer) {
         guard let index = sender.view?.tag else { return }
         startPaper(index: index, random: false)
@@ -734,7 +787,7 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate, UIGestur
         feedbackText = nil
         render()
         autoTimer?.invalidate()
-        autoTimer = Timer.scheduledTimer(withTimeInterval: 0.38, repeats: false) { [weak self] _ in
+        autoTimer = Timer.scheduledTimer(withTimeInterval: 0.24, repeats: false) { [weak self] _ in
             guard let self else { return }
             self.currentIndex += 1
             self.selectedAnswers.removeAll()
@@ -747,19 +800,12 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate, UIGestur
     }
 
     private func renderCalmQuestionChange() {
-        UIView.animate(withDuration: 0.18, delay: 0, options: [.curveEaseInOut, .allowUserInteraction]) {
-            self.contentStack.alpha = 0.72
-            self.contentStack.transform = CGAffineTransform(translationX: 0, y: 2)
-        } completion: { _ in
+        UIView.transition(with: contentStack, duration: 0.16, options: [.transitionCrossDissolve, .allowUserInteraction]) {
             self.clearStack(self.contentStack)
             self.renderTabs()
             self.renderPractice()
-            self.contentStack.alpha = 0.82
-            self.contentStack.transform = CGAffineTransform(translationX: 0, y: 2)
-            UIView.animate(withDuration: 0.28, delay: 0.1, options: [.curveEaseInOut, .allowUserInteraction]) {
-                self.contentStack.alpha = 1
-                self.contentStack.transform = .identity
-            }
+            self.contentStack.alpha = 1
+            self.contentStack.transform = .identity
         }
     }
 
@@ -796,7 +842,7 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate, UIGestur
             let translation = gesture.translation(in: view)
             if abs(translation.x) > abs(translation.y) {
                 scrollView.contentOffset = panStartOffset
-                contentStack.transform = CGAffineTransform(translationX: translation.x * 0.08, y: 0)
+                contentStack.transform = CGAffineTransform(translationX: translation.x * 0.03, y: 0)
             }
         case .ended:
             let translation = gesture.translation(in: view)
