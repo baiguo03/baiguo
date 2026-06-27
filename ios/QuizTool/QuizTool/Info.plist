@@ -11,15 +11,15 @@
   <key>CFBundleInfoDictionaryVersion</key>
   <string>6.0</string>
   <key>CFBundleName</key>
-  <string>QuizNativeV8</string>
+  <string>QuizNativeV9</string>
   <key>CFBundleDisplayName</key>
-  <string>&#x4e91;&#x9898;V8</string>
+  <string>&#x4e91;&#x9898;V9</string>
   <key>CFBundlePackageType</key>
   <string>$(PRODUCT_BUNDLE_PACKAGE_TYPE)</string>
   <key>CFBundleShortVersionString</key>
-  <string>1.8</string>
+  <string>1.9</string>
   <key>CFBundleVersion</key>
-  <string>9</string>
+  <string>10</string>
   <key>LSRequiresIPhoneOS</key>
   <true/>
   <key>UIApplicationSceneManifest</key>

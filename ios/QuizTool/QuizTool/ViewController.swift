@@ -122,7 +122,7 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate {
             tabStack.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             tabStack.trailingAnchor.constraint(equalTo: view.trailingAnchor),
             tabStack.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor),
-            tabStack.heightAnchor.constraint(equalToConstant: 64)
+            tabStack.heightAnchor.constraint(equalToConstant: 78)
         ])
     }
 
@@ -155,25 +155,23 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate {
 
     private func renderTabs() {
         clearStack(tabStack)
-        let items: [(Page, String)] = [
-            (.home, "\u{9996}\u{9875}"),
-            (.library, "\u{9898}\u{5e93}"),
-            (.wrong, "\u{9519}\u{9898}"),
-            (.profile, "\u{6211}\u{7684}")
+        let items: [(Page, String, String)] = [
+            (.home, "\u{25cf}", "\u{9996}\u{9875}"),
+            (.library, "\u{25c7}", "\u{9898}\u{5e93}"),
+            (.wrong, "\u{25ce}", "\u{9519}\u{9898}"),
+            (.profile, "\u{25bd}", "\u{6211}\u{7684}")
         ]
         for item in items {
             let selected = item.0 == page || (page == .practice && item.0 == .library)
-            let button = makeButton(item.1, style: selected ? .primary : .secondary)
+            let button = makeTabButton(icon: item.1, title: item.2, selected: selected)
             button.tag = item.0.rawValue
-            button.titleLabel?.font = UIFont.systemFont(ofSize: 13, weight: .semibold)
-            button.layer.cornerRadius = 12
             button.addTarget(self, action: #selector(tabTapped(_:)), for: .touchUpInside)
             tabStack.addArrangedSubview(button)
         }
     }
 
     private func renderHome() {
-        addTitle("\u{4e91}\u{9898} V8", "\u{7ba1}\u{7406}\u{591a}\u{4efd}\u{8bd5}\u{9898}\u{ff0c}\u{70b9}\u{5f00}\u{9898}\u{5e93}\u{540e}\u{518d}\u{5f00}\u{59cb}\u{7ec3}\u{4e60}\u{3002}")
+        addTitle("\u{4e91}\u{9898} V9", "\u{7ba1}\u{7406}\u{591a}\u{4efd}\u{8bd5}\u{9898}\u{ff0c}\u{70b9}\u{5f00}\u{9898}\u{5e93}\u{540e}\u{518d}\u{5f00}\u{59cb}\u{7ec3}\u{4e60}\u{3002}")
         addStatsRow()
         addSectionHeader("\u{5feb}\u{6377}\u{5165}\u{53e3}")
         addListGroup([
@@ -234,9 +232,11 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate {
             button.addTarget(self, action: #selector(answerTapped(_:)), for: .touchUpInside)
             contentStack.addArrangedSubview(button)
         }
-        let submit = makeButton("\u{63d0}\u{4ea4}\u{7b54}\u{6848}", style: .primary)
-        submit.addTarget(self, action: #selector(submitAnswer), for: .touchUpInside)
-        contentStack.addArrangedSubview(submit)
+        if !autoNextEnabled {
+            let submit = makeButton("\u{63d0}\u{4ea4}\u{7b54}\u{6848}", style: .primary)
+            submit.addTarget(self, action: #selector(submitAnswer), for: .touchUpInside)
+            contentStack.addArrangedSubview(submit)
+        }
         let next = makeButton("\u{4e0b}\u{4e00}\u{9898}", style: .secondary)
         next.addTarget(self, action: #selector(nextQuestion), for: .touchUpInside)
         contentStack.addArrangedSubview(next)
@@ -260,7 +260,7 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate {
         addTitle("\u{6211}\u{7684}", "\u{504f}\u{597d}\u{8bbe}\u{7f6e}\u{548c}\u{7248}\u{672c}\u{4fe1}\u{606f}\u{3002}")
         addSwitchRow(title: "\u{7b54}\u{5bf9}\u{540e}\u{81ea}\u{52a8}\u{4e0b}\u{4e00}\u{9898}", subtitle: "\u{6253}\u{5f00}\u{540e}\u{4e0d}\u{5f39}\u{7b54}\u{5bf9}\u{63d0}\u{793a}\u{ff0c}\u{76f4}\u{63a5}\u{8fdb}\u{5165}\u{4e0b}\u{4e00}\u{9898}\u{3002}", isOn: autoNextEnabled, action: #selector(autoNextChanged(_:)))
         addListGroup([
-            infoRow("\u{5e94}\u{7528}\u{7248}\u{672c}", subtitle: "\u{4e91}\u{9898} V8 / build 9"),
+            infoRow("\u{5e94}\u{7528}\u{7248}\u{672c}", subtitle: "\u{4e91}\u{9898} V9 / build 10"),
             infoRow("\u{6587}\u{4ef6}\u{5bfc}\u{5165}", subtitle: "TXT / PDF"),
             infoRow("API", subtitle: "\u{9884}\u{7559}\u{5165}\u{53e3}")
         ])
@@ -423,12 +423,43 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate {
     }
 
     private func makeOptionButton(_ option: Option, selected: Bool) -> UIButton {
-        let button = makeButton("\(option.key). \(option.text)", style: selected ? .primary : .plain)
+        let title = selected ? "\u{2713}  \(option.key). \(option.text)" : "\(option.key). \(option.text)"
+        let button = makeButton(title, style: .plain)
         button.contentHorizontalAlignment = .left
         button.accessibilityIdentifier = option.key
-        button.layer.borderWidth = selected ? 0 : 0.5
-        button.layer.borderColor = UIColor.separator.cgColor
+        button.backgroundColor = selected ? UIColor.tertiarySystemFill : UIColor.white
+        button.tintColor = UIColor.label
+        button.layer.borderWidth = selected ? 1 : 0.5
+        button.layer.borderColor = selected ? accentColor.cgColor : UIColor.separator.cgColor
         return button
+    }
+
+    private func makeTabButton(icon: String, title: String, selected: Bool) -> UIButton {
+        let button = UIButton(type: .system)
+        let color = selected ? accentColor : UIColor.label
+        let text = "\(icon)\n\(title)"
+        let attributed = NSMutableAttributedString(
+            string: text,
+            attributes: [
+                .font: UIFont.systemFont(ofSize: 11, weight: .regular),
+                .foregroundColor: color,
+                .paragraphStyle: centeredParagraphStyle()
+            ]
+        )
+        attributed.addAttributes([.font: UIFont.systemFont(ofSize: 24, weight: .regular)], range: NSRange(location: 0, length: icon.count))
+        button.setAttributedTitle(attributed, for: .normal)
+        button.titleLabel?.numberOfLines = 2
+        button.titleLabel?.textAlignment = .center
+        button.backgroundColor = UIColor.clear
+        button.tintColor = color
+        return button
+    }
+
+    private func centeredParagraphStyle() -> NSParagraphStyle {
+        let style = NSMutableParagraphStyle()
+        style.alignment = .center
+        style.lineSpacing = 2
+        return style
     }
 
     private func makeButton(_ title: String, style: ButtonStyle) -> UIButton {
@@ -500,7 +531,11 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate {
         guard let key = sender.accessibilityIdentifier else { return }
         selectedAnswers = Set([key])
         feedbackText = nil
-        render()
+        if autoNextEnabled {
+            submitAnswer()
+        } else {
+            render()
+        }
     }
 
     @objc private func submitAnswer() {
