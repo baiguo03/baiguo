@@ -29,7 +29,7 @@ final class ViewController: UIViewController {
 
     private var questions: [Question] = [
         Question(
-            prompt: "Warm antibody autoimmune hemolytic anemia is usually related to which antibody type?",
+            prompt: "\u{6e29}\u{6297}\u{4f53}\u{578b}\u{81ea}\u{8eab}\u{514d}\u{75ab}\u{6027}\u{6eb6}\u{8840}\u{6027}\u{8d2b}\u{8840}\u{7684}\u{6297}\u{4f53}\u{7c7b}\u{578b}\u{901a}\u{5e38}\u{4e3a}\u{ff08} \u{ff09}",
             options: [
                 Option(key: "A", text: "IgA"),
                 Option(key: "B", text: "IgM"),
@@ -37,18 +37,18 @@ final class ViewController: UIViewController {
                 Option(key: "D", text: "IgG")
             ],
             answer: Set(["D"]),
-            explanation: "Warm antibody autoimmune hemolytic anemia is commonly IgG mediated.",
-            kind: "Single Choice"
+            explanation: "\u{6e29}\u{6297}\u{4f53}\u{578b}\u{81ea}\u{8eab}\u{514d}\u{75ab}\u{6027}\u{6eb6}\u{8840}\u{6027}\u{8d2b}\u{8840}\u{591a}\u{4e3a} IgG \u{578b}\u{6297}\u{4f53}\u{3002}",
+            kind: "\u{5355}\u{9009}\u{9898}"
         ),
         Question(
-            prompt: "AI parsed questions should still be checked before publishing.",
+            prompt: "AI \u{89e3}\u{6790}\u{540e}\u{7684}\u{9898}\u{76ee}\u{4ecd}\u{9700}\u{8981}\u{4eba}\u{5de5}\u{6821}\u{5bf9}\u{540e}\u{518d}\u{53d1}\u{5e03}\u{3002}",
             options: [
-                Option(key: "A", text: "True"),
-                Option(key: "B", text: "False")
+                Option(key: "A", text: "\u{6b63}\u{786e}"),
+                Option(key: "B", text: "\u{9519}\u{8bef}")
             ],
             answer: Set(["A"]),
-            explanation: "AI output needs manual review before use.",
-            kind: "Judge"
+            explanation: "AI \u{8f93}\u{51fa}\u{9700}\u{8981}\u{4eba}\u{5de5}\u{6821}\u{5bf9}\u{3002}",
+            kind: "\u{5224}\u{65ad}\u{9898}"
         )
     ]
 
@@ -56,7 +56,7 @@ final class ViewController: UIViewController {
     private var order: [Int] = [0, 1]
     private var currentIndex = 0
     private var selectedAnswers = Set<String>()
-    private var mode = "Sequential"
+    private var modeTitle = "\u{987a}\u{5e8f}\u{7ec3}\u{4e60}"
     private var page: Page = .home
     private var autoTimer: Timer?
 
@@ -91,12 +91,10 @@ final class ViewController: UIViewController {
             scrollView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             scrollView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
             scrollView.bottomAnchor.constraint(equalTo: tabStack.topAnchor),
-
             contentStack.topAnchor.constraint(equalTo: scrollView.contentLayoutGuide.topAnchor, constant: 18),
             contentStack.leadingAnchor.constraint(equalTo: scrollView.frameLayoutGuide.leadingAnchor, constant: 16),
             contentStack.trailingAnchor.constraint(equalTo: scrollView.frameLayoutGuide.trailingAnchor, constant: -16),
             contentStack.bottomAnchor.constraint(equalTo: scrollView.contentLayoutGuide.bottomAnchor, constant: -18),
-
             tabStack.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             tabStack.trailingAnchor.constraint(equalTo: view.trailingAnchor),
             tabStack.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor),
@@ -107,7 +105,6 @@ final class ViewController: UIViewController {
     private func render() {
         clearStack(contentStack)
         renderTabs()
-
         switch page {
         case .home:
             renderHome()
@@ -132,13 +129,12 @@ final class ViewController: UIViewController {
     private func renderTabs() {
         clearStack(tabStack)
         let items: [(Page, String)] = [
-            (.home, "Home"),
-            (.practice, "Practice"),
-            (.importText, "Import"),
-            (.wrong, "Wrong"),
-            (.settings, "Settings")
+            (.home, "\u{9996}\u{9875}"),
+            (.practice, "\u{7ec3}\u{4e60}"),
+            (.importText, "\u{5bfc}\u{5165}"),
+            (.wrong, "\u{9519}\u{9898}"),
+            (.settings, "\u{8bbe}\u{7f6e}")
         ]
-
         for item in items {
             let button = makeButton(item.1, style: item.0 == page ? .primary : .secondary)
             button.tag = item.0.rawValue
@@ -148,34 +144,32 @@ final class ViewController: UIViewController {
     }
 
     private func renderHome() {
-        addTitle("QuizNativeV2", "Native UIKit version. No WebView. Build marker: native-v2.")
+        addTitle("\u{4e91}\u{9898} V5", "\u{539f}\u{751f} UIKit \u{7248}\u{672c}\u{ff0c}\u{4e0d}\u{518d}\u{4f7f}\u{7528} WebView\u{3002}\u{6784}\u{5efa}\u{6807}\u{8bb0}\u{ff1a}native-v5\u{3002}")
         addCard([
-            makeText("Question bank: \(questions.count)"),
-            makeText("Wrong questions: \(wrongQuestions.count)")
+            makeText("\u{9898}\u{5e93}\u{ff1a}\(questions.count) \u{9898}"),
+            makeText("\u{9519}\u{9898}\u{ff1a}\(wrongQuestions.count) \u{9898}")
         ])
 
-        let sequential = makeButton("Start Sequential Practice", style: .primary)
+        let sequential = makeButton("\u{5f00}\u{59cb}\u{987a}\u{5e8f}\u{7ec3}\u{4e60}", style: .primary)
         sequential.addTarget(self, action: #selector(startSequential), for: .touchUpInside)
         contentStack.addArrangedSubview(sequential)
 
-        let random = makeButton("Start Random Practice", style: .secondary)
+        let random = makeButton("\u{5f00}\u{59cb}\u{968f}\u{673a}\u{7ec3}\u{4e60}", style: .secondary)
         random.addTarget(self, action: #selector(startRandom), for: .touchUpInside)
         contentStack.addArrangedSubview(random)
     }
 
     private func renderPractice() {
         guard !questions.isEmpty else {
-            addTitle("Practice", "No questions yet.")
+            addTitle("\u{7ec3}\u{4e60}", "\u{6682}\u{65e0}\u{9898}\u{76ee}\u{3002}")
             return
         }
-
         let question = questions[order[currentIndex]]
-        addTitle("Practice", "\(mode)  \(currentIndex + 1) / \(order.count)")
+        addTitle("\u{7ec3}\u{4e60}", "\(modeTitle)  \(currentIndex + 1) / \(order.count)")
         addCard([
             makeText(question.kind),
             makeText(question.prompt)
         ])
-
         for option in question.options {
             let selected = selectedAnswers.contains(option.key)
             let button = makeButton("\(option.key). \(option.text)", style: selected ? .primary : .plain)
@@ -184,37 +178,35 @@ final class ViewController: UIViewController {
             button.addTarget(self, action: #selector(answerTapped(_:)), for: .touchUpInside)
             contentStack.addArrangedSubview(button)
         }
-
-        let submit = makeButton("Submit", style: .primary)
+        let submit = makeButton("\u{63d0}\u{4ea4}", style: .primary)
         submit.addTarget(self, action: #selector(submitAnswer), for: .touchUpInside)
         contentStack.addArrangedSubview(submit)
 
-        let next = makeButton("Next", style: .secondary)
+        let next = makeButton("\u{4e0b}\u{4e00}\u{9898}", style: .secondary)
         next.addTarget(self, action: #selector(nextQuestion), for: .touchUpInside)
         contentStack.addArrangedSubview(next)
     }
 
     private func renderImport() {
-        addTitle("Import", "Paste text from PDF or Word. This native version keeps import simple first.")
-
+        addTitle("\u{5bfc}\u{5165}", "\u{4ece} PDF \u{6216} Word \u{590d}\u{5236}\u{9898}\u{76ee}\u{6587}\u{672c}\u{540e}\u{7c98}\u{8d34}\u{5230}\u{8fd9}\u{91cc}\u{3002}")
         let textView = UITextView()
         textView.font = UIFont.systemFont(ofSize: 16)
         textView.backgroundColor = UIColor.secondarySystemGroupedBackground
         textView.layer.cornerRadius = 14
-        textView.text = "1. Sample question A. Option A B. Option B C. Option C D. Option D"
+        textView.text = "1. \u{793a}\u{4f8b}\u{9898}\u{5e72} A. \u{9009}\u{9879}A B. \u{9009}\u{9879}B C. \u{9009}\u{9879}C D. \u{9009}\u{9879}D"
         textView.heightAnchor.constraint(equalToConstant: 220).isActive = true
         importTextView = textView
         contentStack.addArrangedSubview(textView)
 
-        let parse = makeButton("Import as Sample Questions", style: .primary)
+        let parse = makeButton("\u{5bfc}\u{5165}\u{4e3a}\u{6837}\u{672c}\u{9898}", style: .primary)
         parse.addTarget(self, action: #selector(importTapped), for: .touchUpInside)
         contentStack.addArrangedSubview(parse)
     }
 
     private func renderWrong() {
-        addTitle("Wrong", "Wrong answers are recorded here.")
+        addTitle("\u{9519}\u{9898}", "\u{7b54}\u{9519}\u{7684}\u{9898}\u{4f1a}\u{8bb0}\u{5f55}\u{5728}\u{8fd9}\u{91cc}\u{3002}")
         if wrongQuestions.isEmpty {
-            addCard([makeText("No wrong questions yet.")])
+            addCard([makeText("\u{6682}\u{65e0}\u{9519}\u{9898}\u{3002}")])
         } else {
             for question in wrongQuestions {
                 addCard([makeText(question.prompt)])
@@ -223,12 +215,12 @@ final class ViewController: UIViewController {
     }
 
     private func renderSettings() {
-        addTitle("Settings", "Version marker: QuizNativeV2 / CFBundleVersion 3")
+        addTitle("\u{8bbe}\u{7f6e}", "\u{7248}\u{672c}\u{6807}\u{8bb0}\u{ff1a}\u{4e91}\u{9898} V5 / build 6")
         addCard([
-            makeText("App name: QuizNativeV2"),
-            makeText("Runtime: Native UIKit"),
-            makeText("iOS target: 16.0"),
-            makeText("WebView removed to avoid blank screen.")
+            makeText("\u{5e94}\u{7528}\u{540d}\u{ff1a}\u{4e91}\u{9898} V5"),
+            makeText("\u{8fd0}\u{884c}\u{65b9}\u{5f0f}\u{ff1a}\u{539f}\u{751f} UIKit"),
+            makeText("\u{517c}\u{5bb9}\u{ff1a}iOS 16.0 \u{53ca}\u{4ee5}\u{4e0a}"),
+            makeText("\u{5df2}\u{79fb}\u{9664} WebView\u{ff0c}\u{907f}\u{514d}\u{767d}\u{5c4f}\u{3002}")
         ])
     }
 
@@ -279,7 +271,6 @@ final class ViewController: UIViewController {
         button.titleLabel?.numberOfLines = 0
         button.layer.cornerRadius = 14
         button.contentEdgeInsets = UIEdgeInsets(top: 12, left: 12, bottom: 12, right: 12)
-
         switch style {
         case .primary:
             button.backgroundColor = UIColor.systemBlue
@@ -291,7 +282,6 @@ final class ViewController: UIViewController {
             button.backgroundColor = UIColor.secondarySystemGroupedBackground
             button.tintColor = UIColor.label
         }
-
         return button
     }
 
@@ -302,7 +292,7 @@ final class ViewController: UIViewController {
     }
 
     @objc private func startSequential() {
-        mode = "Sequential"
+        modeTitle = "\u{987a}\u{5e8f}\u{7ec3}\u{4e60}"
         order = Array(questions.indices)
         currentIndex = 0
         selectedAnswers.removeAll()
@@ -311,7 +301,7 @@ final class ViewController: UIViewController {
     }
 
     @objc private func startRandom() {
-        mode = "Random"
+        modeTitle = "\u{968f}\u{673a}\u{7ec3}\u{4e60}"
         order = Array(questions.indices).shuffled()
         currentIndex = 0
         selectedAnswers.removeAll()
@@ -327,20 +317,16 @@ final class ViewController: UIViewController {
 
     @objc private func submitAnswer() {
         guard !questions.isEmpty else { return }
-
         let question = questions[order[currentIndex]]
         let correct = selectedAnswers == question.answer
-
         if !correct {
             wrongQuestions.append(question)
         }
-
-        let title = correct ? "Correct" : "Wrong"
-        let message = correct ? "Auto next question enabled." : question.explanation
+        let title = correct ? "\u{6b63}\u{786e}" : "\u{9519}\u{8bef}"
+        let message = correct ? "\u{7b54}\u{5bf9}\u{540e}\u{5df2}\u{81ea}\u{52a8}\u{8fdb}\u{5165}\u{4e0b}\u{4e00}\u{9898}\u{3002}" : question.explanation
         let alert = UIAlertController(title: title, message: message, preferredStyle: .alert)
-        alert.addAction(UIAlertAction(title: "OK", style: .default))
+        alert.addAction(UIAlertAction(title: "\u{77e5}\u{9053}\u{4e86}", style: .default))
         present(alert, animated: true)
-
         if correct && currentIndex < order.count - 1 {
             autoTimer?.invalidate()
             autoTimer = Timer.scheduledTimer(withTimeInterval: 0.8, repeats: false) { [weak self] _ in
@@ -359,19 +345,19 @@ final class ViewController: UIViewController {
 
     @objc private func importTapped() {
         let text = importTextView?.text.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        let prompt = text.isEmpty ? "Imported sample question?" : text
+        let prompt = text.isEmpty ? "\u{5bfc}\u{5165}\u{7684}\u{6837}\u{672c}\u{9898}\u{ff1f}" : text
         questions = [
             Question(
                 prompt: prompt,
                 options: [
-                    Option(key: "A", text: "Option A"),
-                    Option(key: "B", text: "Option B"),
-                    Option(key: "C", text: "Option C"),
-                    Option(key: "D", text: "Option D")
+                    Option(key: "A", text: "\u{9009}\u{9879}A"),
+                    Option(key: "B", text: "\u{9009}\u{9879}B"),
+                    Option(key: "C", text: "\u{9009}\u{9879}C"),
+                    Option(key: "D", text: "\u{9009}\u{9879}D")
                 ],
                 answer: Set(["A"]),
-                explanation: "Imported questions default to answer A in this native smoke-test version.",
-                kind: "Imported"
+                explanation: "\u{5bfc}\u{5165}\u{9898}\u{9ed8}\u{8ba4}\u{7b54}\u{6848}\u{4e3a} A\u{ff0c}\u{540e}\u{7eed}\u{4f1a}\u{7ee7}\u{7eed}\u{8865}\u{5145}\u{6821}\u{5bf9}\u{529f}\u{80fd}\u{3002}",
+                kind: "\u{5bfc}\u{5165}\u{9898}"
             )
         ]
         wrongQuestions.removeAll()
