@@ -43,26 +43,38 @@ function setNotice(message) {
 }
 
 async function init() {
-  state.questions = await getAllItems("questions");
-  state.papers = await getAllItems("papers");
-  state.reviewItems = await getAllItems("reviewItems");
+  try {
+    state.questions = await getAllItems("questions");
+    state.papers = await getAllItems("papers");
+    state.reviewItems = await getAllItems("reviewItems");
 
-  if (!state.questions.length) {
-    state.questions = sampleQuestions;
-    await saveItems("questions", state.questions);
-    const paper = {
-      id: createId("paper"),
-      title: "样本练习卷",
-      mode: "practice",
-      durationMinutes: 45,
-      questionIds: state.questions.map((question) => question.id),
-      createdAt: new Date().toISOString(),
-    };
-    state.papers = [paper];
-    await saveItem("papers", paper);
+    if (!state.questions.length) {
+      state.questions = sampleQuestions;
+      await saveItems("questions", state.questions);
+      const paper = {
+        id: createId("paper"),
+        title: "样本练习卷",
+        mode: "practice",
+        durationMinutes: 45,
+        questionIds: state.questions.map((question) => question.id),
+        createdAt: new Date().toISOString(),
+      };
+      state.papers = [paper];
+      await saveItem("papers", paper);
+    }
+
+    render();
+  } catch (error) {
+    app.innerHTML = `
+      <main class="app-shell">
+        <section class="panel">
+          <h1 class="large-title">加载失败</h1>
+          <p class="caption">${String(error?.message || error)}</p>
+        </section>
+      </main>
+    `;
+    console.error(error);
   }
-
-  render();
 }
 
 function navigate(view) {
