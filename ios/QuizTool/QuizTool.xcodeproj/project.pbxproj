@@ -159,7 +159,7 @@
 				INFOPLIST_FILE = QuizTool/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
 				PRODUCT_BUNDLE_IDENTIFIER = app.calcite4884.lyra3161;
-				PRODUCT_NAME = QuizNativeV7;
+				PRODUCT_NAME = QuizNativeV8;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = 1;
 			};
@@ -176,7 +176,7 @@
 				INFOPLIST_FILE = QuizTool/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
 				PRODUCT_BUNDLE_IDENTIFIER = app.calcite4884.lyra3161;
-				PRODUCT_NAME = QuizNativeV7;
+				PRODUCT_NAME = QuizNativeV8;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = 1;
 			};

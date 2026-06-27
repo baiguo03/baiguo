@@ -173,7 +173,7 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate {
     }
 
     private func renderHome() {
-        addTitle("\u{4e91}\u{9898} V7", "\u{7ba1}\u{7406}\u{591a}\u{4efd}\u{8bd5}\u{9898}\u{ff0c}\u{70b9}\u{5f00}\u{9898}\u{5e93}\u{540e}\u{518d}\u{5f00}\u{59cb}\u{7ec3}\u{4e60}\u{3002}")
+        addTitle("\u{4e91}\u{9898} V8", "\u{7ba1}\u{7406}\u{591a}\u{4efd}\u{8bd5}\u{9898}\u{ff0c}\u{70b9}\u{5f00}\u{9898}\u{5e93}\u{540e}\u{518d}\u{5f00}\u{59cb}\u{7ec3}\u{4e60}\u{3002}")
         addStatsRow()
         addSectionHeader("\u{5feb}\u{6377}\u{5165}\u{53e3}")
         addListGroup([
@@ -260,7 +260,7 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate {
         addTitle("\u{6211}\u{7684}", "\u{504f}\u{597d}\u{8bbe}\u{7f6e}\u{548c}\u{7248}\u{672c}\u{4fe1}\u{606f}\u{3002}")
         addSwitchRow(title: "\u{7b54}\u{5bf9}\u{540e}\u{81ea}\u{52a8}\u{4e0b}\u{4e00}\u{9898}", subtitle: "\u{6253}\u{5f00}\u{540e}\u{4e0d}\u{5f39}\u{7b54}\u{5bf9}\u{63d0}\u{793a}\u{ff0c}\u{76f4}\u{63a5}\u{8fdb}\u{5165}\u{4e0b}\u{4e00}\u{9898}\u{3002}", isOn: autoNextEnabled, action: #selector(autoNextChanged(_:)))
         addListGroup([
-            infoRow("\u{5e94}\u{7528}\u{7248}\u{672c}", subtitle: "\u{4e91}\u{9898} V7 / build 8"),
+            infoRow("\u{5e94}\u{7528}\u{7248}\u{672c}", subtitle: "\u{4e91}\u{9898} V8 / build 9"),
             infoRow("\u{6587}\u{4ef6}\u{5bfc}\u{5165}", subtitle: "TXT / PDF"),
             infoRow("API", subtitle: "\u{9884}\u{7559}\u{5165}\u{53e3}")
         ])
@@ -544,9 +544,9 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate {
         clearStack(contentStack)
         renderTabs()
         renderPractice()
-        contentStack.transform = CGAffineTransform(translationX: 24, y: 0)
-        contentStack.alpha = 0
-        UIView.animate(withDuration: 0.26, delay: 0, options: [.curveEaseOut, .allowUserInteraction]) {
+        contentStack.transform = CGAffineTransform(translationX: 0, y: 4)
+        contentStack.alpha = 0.72
+        UIView.animate(withDuration: 0.18, delay: 0, options: [.curveEaseInOut, .allowUserInteraction]) {
             self.contentStack.transform = .identity
             self.contentStack.alpha = 1
         }
