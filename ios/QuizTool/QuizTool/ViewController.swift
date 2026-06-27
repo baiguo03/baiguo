@@ -2,7 +2,7 @@ import UIKit
 import PDFKit
 import UniformTypeIdentifiers
 
-final class ViewController: UIViewController, UIDocumentPickerDelegate {
+final class ViewController: UIViewController, UIDocumentPickerDelegate, UIGestureRecognizerDelegate {
     private struct Paper {
         let title: String
         let source: String
@@ -32,6 +32,7 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate {
     private let scrollView = UIScrollView()
     private let contentStack = UIStackView()
     private let tabStack = UIStackView()
+    private var panStartOffset: CGPoint = .zero
     private var importTextView: UITextView?
     private var feedbackText: String?
     private var feedbackIsPositive = true
@@ -104,13 +105,13 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate {
         contentStack.translatesAutoresizingMaskIntoConstraints = false
         tabStack.translatesAutoresizingMaskIntoConstraints = false
         contentStack.axis = .vertical
-        contentStack.spacing = 10
+        contentStack.spacing = 8
         contentStack.alignment = .fill
         tabStack.axis = .horizontal
         tabStack.distribution = .fillEqually
         tabStack.spacing = 0
         tabStack.backgroundColor = UIColor.white.withAlphaComponent(0.96)
-        tabStack.layoutMargins = UIEdgeInsets(top: 8, left: 10, bottom: 18, right: 10)
+        tabStack.layoutMargins = UIEdgeInsets(top: 7, left: 10, bottom: 16, right: 10)
         tabStack.isLayoutMarginsRelativeArrangement = true
 
         view.addSubview(scrollView)
@@ -121,25 +122,22 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate {
             scrollView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             scrollView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
             scrollView.bottomAnchor.constraint(equalTo: tabStack.topAnchor),
-            contentStack.topAnchor.constraint(equalTo: scrollView.contentLayoutGuide.topAnchor, constant: 14),
-            contentStack.leadingAnchor.constraint(equalTo: scrollView.frameLayoutGuide.leadingAnchor, constant: 20),
-            contentStack.trailingAnchor.constraint(equalTo: scrollView.frameLayoutGuide.trailingAnchor, constant: -20),
-            contentStack.bottomAnchor.constraint(equalTo: scrollView.contentLayoutGuide.bottomAnchor, constant: -16),
+            contentStack.topAnchor.constraint(equalTo: scrollView.contentLayoutGuide.topAnchor, constant: 10),
+            contentStack.leadingAnchor.constraint(equalTo: scrollView.frameLayoutGuide.leadingAnchor, constant: 18),
+            contentStack.trailingAnchor.constraint(equalTo: scrollView.frameLayoutGuide.trailingAnchor, constant: -18),
+            contentStack.bottomAnchor.constraint(equalTo: scrollView.contentLayoutGuide.bottomAnchor, constant: -14),
             tabStack.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             tabStack.trailingAnchor.constraint(equalTo: view.trailingAnchor),
             tabStack.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor),
-            tabStack.heightAnchor.constraint(equalToConstant: 86)
+            tabStack.heightAnchor.constraint(equalToConstant: 82)
         ])
     }
 
     private func configureSwipeGestures() {
-        let leftEdge = UIScreenEdgePanGestureRecognizer(target: self, action: #selector(handleLeftEdgeSwipe(_:)))
-        leftEdge.edges = UIRectEdge.left
-        view.addGestureRecognizer(leftEdge)
-
-        let rightEdge = UIScreenEdgePanGestureRecognizer(target: self, action: #selector(handleRightEdgeSwipe(_:)))
-        rightEdge.edges = UIRectEdge.right
-        view.addGestureRecognizer(rightEdge)
+        let pan = UIPanGestureRecognizer(target: self, action: #selector(handlePracticePan(_:)))
+        pan.delegate = self
+        pan.cancelsTouchesInView = false
+        scrollView.addGestureRecognizer(pan)
     }
 
     private func render(animated: Bool = true) {
@@ -286,7 +284,7 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate {
     private func addTitle(_ title: String, _ subtitle: String) {
         let titleLabel = UILabel()
         titleLabel.text = title
-        titleLabel.font = UIFont.systemFont(ofSize: 27, weight: .bold)
+        titleLabel.font = UIFont.systemFont(ofSize: 24, weight: .bold)
         titleLabel.numberOfLines = 0
         contentStack.addArrangedSubview(titleLabel)
         let subtitleLabel = makeText(subtitle, size: 15, weight: .regular, color: UIColor.secondaryLabel)
@@ -312,21 +310,21 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate {
     }
 
     private func makeStatCard(_ title: String, _ value: String) -> UIView {
-        let valueLabel = makeText(value, size: 24, weight: .bold, color: accentColor)
-        let titleLabel = makeText(title, size: 12, weight: .medium, color: .secondaryLabel)
+        let valueLabel = makeText(value, size: 20, weight: .bold, color: accentColor)
+        let titleLabel = makeText(title, size: 11, weight: .medium, color: .secondaryLabel)
         let stack = UIStackView(arrangedSubviews: [valueLabel, titleLabel])
         stack.axis = .vertical
         stack.spacing = 2
         stack.alignment = .center
-        stack.layoutMargins = UIEdgeInsets(top: 14, left: 10, bottom: 14, right: 10)
+        stack.layoutMargins = UIEdgeInsets(top: 11, left: 10, bottom: 11, right: 10)
         stack.isLayoutMarginsRelativeArrangement = true
         stack.backgroundColor = cardBackgroundColor
-        stack.layer.cornerRadius = 18
+        stack.layer.cornerRadius = 16
         return stack
     }
 
     private func row(_ title: String, subtitle: String, tag: Int = 0, action: Selector?) -> UIView {
-        let titleLabel = makeText(title, size: 16, weight: .semibold)
+        let titleLabel = makeText(title, size: 15, weight: .semibold)
         let subtitleLabel = makeText(subtitle, size: 13, weight: .regular, color: .secondaryLabel)
         let labels = UIStackView(arrangedSubviews: [titleLabel, subtitleLabel])
         labels.axis = .vertical
@@ -336,7 +334,7 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate {
         row.axis = .horizontal
         row.alignment = .center
         row.spacing = 12
-        row.layoutMargins = UIEdgeInsets(top: 13, left: 14, bottom: 13, right: 14)
+        row.layoutMargins = UIEdgeInsets(top: 11, left: 14, bottom: 11, right: 14)
         row.isLayoutMarginsRelativeArrangement = true
         row.tag = tag
         if let action {
@@ -355,7 +353,7 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate {
         let stack = UIStackView()
         stack.axis = .vertical
         stack.backgroundColor = cardBackgroundColor
-        stack.layer.cornerRadius = 22
+        stack.layer.cornerRadius = 18
         stack.clipsToBounds = true
         for index in rows.indices {
             stack.addArrangedSubview(rows[index])
@@ -370,8 +368,8 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate {
     }
 
     private func addQuestionCard(_ question: Question) {
-        let chip = makeText(question.kind, size: 14, weight: .bold, color: accentColor)
-        let prompt = makeText(question.prompt, size: 23, weight: .bold)
+        let chip = makeText(question.kind, size: 13, weight: .bold, color: accentColor)
+        let prompt = makeText(question.prompt, size: 20, weight: .bold)
         addCard([chip, prompt])
     }
 
@@ -419,15 +417,15 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate {
         let stack = UIStackView(arrangedSubviews: views)
         stack.axis = .vertical
         stack.spacing = 10
-        stack.layoutMargins = UIEdgeInsets(top: 18, left: 18, bottom: 18, right: 18)
+        stack.layoutMargins = UIEdgeInsets(top: 15, left: 16, bottom: 15, right: 16)
         stack.isLayoutMarginsRelativeArrangement = true
         stack.backgroundColor = cardBackgroundColor
-        stack.layer.cornerRadius = 22
+        stack.layer.cornerRadius = 18
         contentStack.addArrangedSubview(stack)
     }
 
     private func addSwitchRow(title: String, subtitle: String, isOn: Bool, action: Selector) {
-        let titleLabel = makeText(title, size: 16, weight: .semibold)
+        let titleLabel = makeText(title, size: 15, weight: .semibold)
         let subtitleLabel = makeText(subtitle, size: 13, weight: .regular, color: .secondaryLabel)
         let labels = UIStackView(arrangedSubviews: [titleLabel, subtitleLabel])
         labels.axis = .vertical
@@ -440,7 +438,7 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate {
         row.axis = .horizontal
         row.alignment = .center
         row.spacing = 12
-        row.layoutMargins = UIEdgeInsets(top: 14, left: 14, bottom: 14, right: 14)
+        row.layoutMargins = UIEdgeInsets(top: 12, left: 14, bottom: 12, right: 14)
         row.isLayoutMarginsRelativeArrangement = true
         row.backgroundColor = cardBackgroundColor
         row.layer.cornerRadius = 18
@@ -472,15 +470,15 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate {
     private func makeTabButton(icon: String, title: String, selected: Bool) -> UIButton {
         let button = UIButton(type: .system)
         let color = selected ? accentColor : UIColor.label
-        let image = UIImage(systemName: icon)?.withConfiguration(UIImage.SymbolConfiguration(pointSize: 22, weight: .regular))
+        let image = UIImage(systemName: icon)?.withConfiguration(UIImage.SymbolConfiguration(pointSize: 19, weight: .regular))
         button.setImage(image, for: .normal)
         button.setTitle(title, for: .normal)
-        button.titleLabel?.font = UIFont.systemFont(ofSize: 12, weight: .semibold)
+        button.titleLabel?.font = UIFont.systemFont(ofSize: 11, weight: .semibold)
         button.titleLabel?.textAlignment = .center
         button.backgroundColor = UIColor.clear
         button.tintColor = color
         button.imageView?.contentMode = .scaleAspectFit
-        button.alignImageAboveTitle(spacing: 3)
+        button.alignImageAboveTitle(spacing: 2)
         return button
     }
 
@@ -494,10 +492,10 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate {
     private func makeButton(_ title: String, style: ButtonStyle) -> UIButton {
         let button = UIButton(type: .system)
         button.setTitle(title, for: .normal)
-        button.titleLabel?.font = UIFont.systemFont(ofSize: 15, weight: .semibold)
+        button.titleLabel?.font = UIFont.systemFont(ofSize: 14, weight: .semibold)
         button.titleLabel?.numberOfLines = 0
         button.layer.cornerRadius = 14
-        button.contentEdgeInsets = UIEdgeInsets(top: 13, left: 14, bottom: 13, right: 14)
+        button.contentEdgeInsets = UIEdgeInsets(top: 11, left: 14, bottom: 11, right: 14)
         switch style {
         case .primary:
             button.backgroundColor = accentColor
@@ -506,7 +504,7 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate {
             button.backgroundColor = UIColor.tertiarySystemFill
             button.tintColor = UIColor.label
         case .plain:
-            button.backgroundColor = UIColor.white
+            button.backgroundColor = cardBackgroundColor
             button.tintColor = UIColor.label
         case .danger:
             button.backgroundColor = UIColor.systemRed.withAlphaComponent(0.12)
@@ -645,14 +643,37 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate {
         renderCalmQuestionChange()
     }
 
-    @objc private func handleLeftEdgeSwipe(_ gesture: UIScreenEdgePanGestureRecognizer) {
-        guard page == .practice, gesture.state == .recognized else { return }
-        previousQuestion()
+    func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
+        guard page == .practice, let pan = gestureRecognizer as? UIPanGestureRecognizer else { return true }
+        let velocity = pan.velocity(in: view)
+        return abs(velocity.x) > abs(velocity.y) * 1.2
     }
 
-    @objc private func handleRightEdgeSwipe(_ gesture: UIScreenEdgePanGestureRecognizer) {
-        guard page == .practice, gesture.state == .recognized else { return }
-        nextQuestion()
+    @objc private func handlePracticePan(_ gesture: UIPanGestureRecognizer) {
+        guard page == .practice else { return }
+        switch gesture.state {
+        case .began:
+            panStartOffset = scrollView.contentOffset
+        case .changed:
+            let translation = gesture.translation(in: view)
+            if abs(translation.x) > abs(translation.y) {
+                scrollView.contentOffset = panStartOffset
+                contentStack.transform = CGAffineTransform(translationX: translation.x * 0.08, y: 0)
+            }
+        case .ended:
+            let translation = gesture.translation(in: view)
+            let velocity = gesture.velocity(in: view)
+            contentStack.transform = .identity
+            if translation.x > 36 || velocity.x > 420 {
+                previousQuestion()
+            } else if translation.x < -36 || velocity.x < -420 {
+                nextQuestion()
+            }
+        case .cancelled, .failed:
+            contentStack.transform = .identity
+        default:
+            break
+        }
     }
 
     @objc private func importTapped() {
