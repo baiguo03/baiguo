@@ -1,19 +1,6 @@
 import UIKit
 
 final class ViewController: UIViewController {
-    private struct Option {
-        let key: String
-        let text: String
-    }
-
-    private struct Question {
-        let prompt: String
-        let options: [Option]
-        let answer: Set<String>
-        let explanation: String
-        let kind: String
-    }
-
     private enum Page: Int {
         case home = 0
         case practice = 1
@@ -22,10 +9,20 @@ final class ViewController: UIViewController {
         case settings = 4
     }
 
+    private enum ButtonStyle {
+        case primary
+        case secondary
+        case plain
+        case danger
+    }
+
     private let scrollView = UIScrollView()
     private let contentStack = UIStackView()
     private let tabStack = UIStackView()
     private var importTextView: UITextView?
+    private var feedbackText: String?
+    private var feedbackIsPositive = true
+    private var autoNextEnabled = true
 
     private var questions: [Question] = [
         Question(
@@ -64,7 +61,7 @@ final class ViewController: UIViewController {
         super.viewDidLoad()
         view.backgroundColor = UIColor.systemGroupedBackground
         configureLayout()
-        render()
+        render(animated: false)
     }
 
     private func configureLayout() {
@@ -73,7 +70,8 @@ final class ViewController: UIViewController {
         tabStack.translatesAutoresizingMaskIntoConstraints = false
 
         contentStack.axis = .vertical
-        contentStack.spacing = 14
+        contentStack.spacing = 12
+        contentStack.alignment = .fill
 
         tabStack.axis = .horizontal
         tabStack.distribution = .fillEqually
@@ -102,20 +100,29 @@ final class ViewController: UIViewController {
         ])
     }
 
-    private func render() {
-        clearStack(contentStack)
-        renderTabs()
-        switch page {
-        case .home:
-            renderHome()
-        case .practice:
-            renderPractice()
-        case .importText:
-            renderImport()
-        case .wrong:
-            renderWrong()
-        case .settings:
-            renderSettings()
+    private func render(animated: Bool = true) {
+        let changes = {
+            self.clearStack(self.contentStack)
+            self.renderTabs()
+            switch self.page {
+            case .home:
+                self.renderHome()
+            case .practice:
+                self.renderPractice()
+            case .importText:
+                self.renderImport()
+            case .wrong:
+                self.renderWrong()
+            case .settings:
+                self.renderSettings()
+            }
+            self.view.layoutIfNeeded()
+        }
+
+        if animated {
+            UIView.transition(with: contentStack, duration: 0.22, options: [.transitionCrossDissolve, .allowUserInteraction], animations: changes)
+        } else {
+            changes()
         }
     }
 
@@ -138,47 +145,47 @@ final class ViewController: UIViewController {
         for item in items {
             let button = makeButton(item.1, style: item.0 == page ? .primary : .secondary)
             button.tag = item.0.rawValue
+            button.titleLabel?.font = UIFont.systemFont(ofSize: 13, weight: .semibold)
+            button.layer.cornerRadius = 12
             button.addTarget(self, action: #selector(tabTapped(_:)), for: .touchUpInside)
             tabStack.addArrangedSubview(button)
         }
     }
 
     private func renderHome() {
-        addTitle("\u{4e91}\u{9898} V5", "\u{539f}\u{751f} UIKit \u{7248}\u{672c}\u{ff0c}\u{4e0d}\u{518d}\u{4f7f}\u{7528} WebView\u{3002}\u{6784}\u{5efa}\u{6807}\u{8bb0}\u{ff1a}native-v5\u{3002}")
-        addCard([
-            makeText("\u{9898}\u{5e93}\u{ff1a}\(questions.count) \u{9898}"),
-            makeText("\u{9519}\u{9898}\u{ff1a}\(wrongQuestions.count) \u{9898}")
-        ])
+        addTitle("\u{4e91}\u{9898} V6", "\u{4e13}\u{6ce8}\u{7ec3}\u{4e60}\u{3001}\u{9519}\u{9898}\u{548c}\u{5bfc}\u{5165}\u{7684}\u{539f}\u{751f} iOS \u{7248}\u{672c}\u{3002}")
+        addStatsRow()
+        addSectionHeader("\u{5f00}\u{59cb}\u{7ec3}\u{4e60}")
 
-        let sequential = makeButton("\u{5f00}\u{59cb}\u{987a}\u{5e8f}\u{7ec3}\u{4e60}", style: .primary)
+        let sequential = makeLargeAction("\u{987a}\u{5e8f}\u{7ec3}\u{4e60}", subtitle: "\u{6309}\u{9898}\u{5e93}\u{987a}\u{5e8f}\u{7a33}\u{5b9a}\u{5237}\u{9898}", color: .systemBlue)
         sequential.addTarget(self, action: #selector(startSequential), for: .touchUpInside)
         contentStack.addArrangedSubview(sequential)
 
-        let random = makeButton("\u{5f00}\u{59cb}\u{968f}\u{673a}\u{7ec3}\u{4e60}", style: .secondary)
+        let random = makeLargeAction("\u{968f}\u{673a}\u{7ec3}\u{4e60}", subtitle: "\u{6253}\u{4e71}\u{987a}\u{5e8f}\u{ff0c}\u{9002}\u{5408}\u{590d}\u{4e60}\u{9636}\u{6bb5}", color: .systemTeal)
         random.addTarget(self, action: #selector(startRandom), for: .touchUpInside)
         contentStack.addArrangedSubview(random)
     }
 
     private func renderPractice() {
         guard !questions.isEmpty else {
-            addTitle("\u{7ec3}\u{4e60}", "\u{6682}\u{65e0}\u{9898}\u{76ee}\u{3002}")
+            addTitle("\u{7ec3}\u{4e60}", "\u{6682}\u{65e0}\u{9898}\u{76ee}\u{ff0c}\u{5148}\u{53bb}\u{5bfc}\u{5165}\u{3002}")
             return
         }
         let question = questions[order[currentIndex]]
         addTitle("\u{7ec3}\u{4e60}", "\(modeTitle)  \(currentIndex + 1) / \(order.count)")
-        addCard([
-            makeText(question.kind),
-            makeText(question.prompt)
-        ])
+        addProgress()
+        if let feedbackText {
+            addFeedback(feedbackText, positive: feedbackIsPositive)
+        }
+        addQuestionCard(question)
         for option in question.options {
             let selected = selectedAnswers.contains(option.key)
-            let button = makeButton("\(option.key). \(option.text)", style: selected ? .primary : .plain)
-            button.contentHorizontalAlignment = .left
-            button.accessibilityIdentifier = option.key
+            let button = makeOptionButton(option, selected: selected)
             button.addTarget(self, action: #selector(answerTapped(_:)), for: .touchUpInside)
             contentStack.addArrangedSubview(button)
         }
-        let submit = makeButton("\u{63d0}\u{4ea4}", style: .primary)
+
+        let submit = makeButton("\u{63d0}\u{4ea4}\u{7b54}\u{6848}", style: .primary)
         submit.addTarget(self, action: #selector(submitAnswer), for: .touchUpInside)
         contentStack.addArrangedSubview(submit)
 
@@ -188,46 +195,51 @@ final class ViewController: UIViewController {
     }
 
     private func renderImport() {
-        addTitle("\u{5bfc}\u{5165}", "\u{4ece} PDF \u{6216} Word \u{590d}\u{5236}\u{9898}\u{76ee}\u{6587}\u{672c}\u{540e}\u{7c98}\u{8d34}\u{5230}\u{8fd9}\u{91cc}\u{3002}")
+        addTitle("\u{5bfc}\u{5165}", "\u{7c98}\u{8d34} PDF \u{6216} Word \u{91cc}\u{7684}\u{9898}\u{76ee}\u{6587}\u{672c}\u{ff0c}\u{652f}\u{6301}\u{201c}\u{7b54}\u{6848}\u{ff1a}A\u{201d}\u{548c}\u{201c}\u{89e3}\u{6790}\u{ff1a}\u{201d}\u{3002}")
         let textView = UITextView()
         textView.font = UIFont.systemFont(ofSize: 16)
         textView.backgroundColor = UIColor.secondarySystemGroupedBackground
-        textView.layer.cornerRadius = 14
-        textView.text = "1. \u{793a}\u{4f8b}\u{9898}\u{5e72} A. \u{9009}\u{9879}A B. \u{9009}\u{9879}B C. \u{9009}\u{9879}C D. \u{9009}\u{9879}D"
-        textView.heightAnchor.constraint(equalToConstant: 220).isActive = true
+        textView.layer.cornerRadius = 16
+        textView.textContainerInset = UIEdgeInsets(top: 14, left: 12, bottom: 14, right: 12)
+        textView.text = "1. \u{793a}\u{4f8b}\u{9898}\u{5e72} A. \u{9009}\u{9879}A B. \u{9009}\u{9879}B C. \u{9009}\u{9879}C D. \u{9009}\u{9879}D \u{7b54}\u{6848}\u{ff1a}A \u{89e3}\u{6790}\u{ff1a}\u{8fd9}\u{91cc}\u{662f}\u{89e3}\u{6790}"
+        textView.heightAnchor.constraint(equalToConstant: 230).isActive = true
         importTextView = textView
         contentStack.addArrangedSubview(textView)
 
-        let parse = makeButton("\u{5bfc}\u{5165}\u{4e3a}\u{6837}\u{672c}\u{9898}", style: .primary)
+        let parse = makeButton("\u{89e3}\u{6790}\u{5e76}\u{5bfc}\u{5165}", style: .primary)
         parse.addTarget(self, action: #selector(importTapped), for: .touchUpInside)
         contentStack.addArrangedSubview(parse)
     }
 
     private func renderWrong() {
-        addTitle("\u{9519}\u{9898}", "\u{7b54}\u{9519}\u{7684}\u{9898}\u{4f1a}\u{8bb0}\u{5f55}\u{5728}\u{8fd9}\u{91cc}\u{3002}")
+        addTitle("\u{9519}\u{9898}", "\u{7b54}\u{9519}\u{7684}\u{9898}\u{4f1a}\u{81ea}\u{52a8}\u{6536}\u{5230}\u{8fd9}\u{91cc}\u{ff0c}\u{53ef}\u{91cd}\u{65b0}\u{7ec3}\u{3002}")
         if wrongQuestions.isEmpty {
-            addCard([makeText("\u{6682}\u{65e0}\u{9519}\u{9898}\u{3002}")])
+            addEmptyState("\u{6682}\u{65e0}\u{9519}\u{9898}", "\u{4fdd}\u{6301}\u{8fd9}\u{4e2a}\u{72b6}\u{6001}\u{4e5f}\u{5f88}\u{4e0d}\u{9519}\u{3002}")
         } else {
             for question in wrongQuestions {
-                addCard([makeText(question.prompt)])
+                addCard([makeText(question.prompt, size: 15, weight: .semibold), makeText(question.explanation, size: 13, weight: .regular, color: .secondaryLabel)])
             }
+            let clear = makeButton("\u{6e05}\u{7a7a}\u{9519}\u{9898}", style: .danger)
+            clear.addTarget(self, action: #selector(clearWrongQuestions), for: .touchUpInside)
+            contentStack.addArrangedSubview(clear)
         }
     }
 
     private func renderSettings() {
-        addTitle("\u{8bbe}\u{7f6e}", "\u{7248}\u{672c}\u{6807}\u{8bb0}\u{ff1a}\u{4e91}\u{9898} V5 / build 6")
+        addTitle("\u{8bbe}\u{7f6e}", "\u{4e91}\u{9898} V6 / build 7")
+        addSwitchRow(title: "\u{7b54}\u{5bf9}\u{540e}\u{81ea}\u{52a8}\u{4e0b}\u{4e00}\u{9898}", subtitle: "\u{6253}\u{5f00}\u{540e}\u{7b54}\u{5bf9}\u{4e0d}\u{5f39}\u{63d0}\u{793a}\u{ff0c}\u{76f4}\u{63a5}\u{6d41}\u{7545}\u{8df3}\u{8f6c}\u{3002}", isOn: autoNextEnabled, action: #selector(autoNextChanged(_:)))
         addCard([
-            makeText("\u{5e94}\u{7528}\u{540d}\u{ff1a}\u{4e91}\u{9898} V5"),
-            makeText("\u{8fd0}\u{884c}\u{65b9}\u{5f0f}\u{ff1a}\u{539f}\u{751f} UIKit"),
-            makeText("\u{517c}\u{5bb9}\u{ff1a}iOS 16.0 \u{53ca}\u{4ee5}\u{4e0a}"),
-            makeText("\u{5df2}\u{79fb}\u{9664} WebView\u{ff0c}\u{907f}\u{514d}\u{767d}\u{5c4f}\u{3002}")
+            makeText("\u{5e94}\u{7528}\u{540d}\u{ff1a}\u{4e91}\u{9898} V6", size: 15, weight: .semibold),
+            makeText("\u{8fd0}\u{884c}\u{65b9}\u{5f0f}\u{ff1a}\u{539f}\u{751f} UIKit", size: 15, weight: .semibold),
+            makeText("\u{517c}\u{5bb9}\u{ff1a}iOS 16.0 \u{53ca}\u{4ee5}\u{4e0a}", size: 15, weight: .semibold),
+            makeText("API \u{5165}\u{53e3}\u{ff1a}\u{4e0b}\u{4e00}\u{7248}\u{63a5}\u{5165}\u{914d}\u{7f6e}", size: 15, weight: .semibold)
         ])
     }
 
     private func addTitle(_ title: String, _ subtitle: String) {
         let titleLabel = UILabel()
         titleLabel.text = title
-        titleLabel.font = UIFont.systemFont(ofSize: 32, weight: .bold)
+        titleLabel.font = UIFont.systemFont(ofSize: 34, weight: .bold)
         titleLabel.numberOfLines = 0
         contentStack.addArrangedSubview(titleLabel)
 
@@ -239,6 +251,70 @@ final class ViewController: UIViewController {
         contentStack.addArrangedSubview(subtitleLabel)
     }
 
+    private func addSectionHeader(_ text: String) {
+        let label = makeText(text, size: 13, weight: .semibold, color: .secondaryLabel)
+        label.text = text.uppercased()
+        contentStack.addArrangedSubview(label)
+    }
+
+    private func addStatsRow() {
+        let row = UIStackView(arrangedSubviews: [
+            makeStatCard("\u{9898}\u{5e93}", "\(questions.count)"),
+            makeStatCard("\u{9519}\u{9898}", "\(wrongQuestions.count)"),
+            makeStatCard("\u{81ea}\u{52a8}", autoNextEnabled ? "ON" : "OFF")
+        ])
+        row.axis = .horizontal
+        row.distribution = .fillEqually
+        row.spacing = 10
+        contentStack.addArrangedSubview(row)
+    }
+
+    private func makeStatCard(_ title: String, _ value: String) -> UIView {
+        let valueLabel = makeText(value, size: 24, weight: .bold)
+        let titleLabel = makeText(title, size: 12, weight: .medium, color: .secondaryLabel)
+        let stack = UIStackView(arrangedSubviews: [valueLabel, titleLabel])
+        stack.axis = .vertical
+        stack.spacing = 2
+        stack.alignment = .center
+        stack.layoutMargins = UIEdgeInsets(top: 14, left: 10, bottom: 14, right: 10)
+        stack.isLayoutMarginsRelativeArrangement = true
+        stack.backgroundColor = UIColor.secondarySystemGroupedBackground
+        stack.layer.cornerRadius = 16
+        return stack
+    }
+
+    private func addQuestionCard(_ question: Question) {
+        let chip = makeText(question.kind, size: 13, weight: .semibold, color: .systemBlue)
+        let prompt = makeText(question.prompt, size: 20, weight: .bold)
+        addCard([chip, prompt])
+    }
+
+    private func addProgress() {
+        let progress = UIProgressView(progressViewStyle: .default)
+        progress.progress = order.isEmpty ? 0 : Float(currentIndex + 1) / Float(order.count)
+        progress.tintColor = UIColor.systemBlue
+        progress.trackTintColor = UIColor.tertiarySystemFill
+        contentStack.addArrangedSubview(progress)
+    }
+
+    private func addFeedback(_ text: String, positive: Bool) {
+        let label = makeText(text, size: 15, weight: .semibold, color: positive ? .systemGreen : .systemRed)
+        label.textAlignment = .center
+        let stack = UIStackView(arrangedSubviews: [label])
+        stack.layoutMargins = UIEdgeInsets(top: 12, left: 12, bottom: 12, right: 12)
+        stack.isLayoutMarginsRelativeArrangement = true
+        stack.backgroundColor = positive ? UIColor.systemGreen.withAlphaComponent(0.12) : UIColor.systemRed.withAlphaComponent(0.12)
+        stack.layer.cornerRadius = 14
+        contentStack.addArrangedSubview(stack)
+    }
+
+    private func addEmptyState(_ title: String, _ subtitle: String) {
+        addCard([
+            makeText(title, size: 18, weight: .bold),
+            makeText(subtitle, size: 14, weight: .regular, color: .secondaryLabel)
+        ])
+    }
+
     private func addCard(_ views: [UIView]) {
         let stack = UIStackView(arrangedSubviews: views)
         stack.axis = .vertical
@@ -246,22 +322,58 @@ final class ViewController: UIViewController {
         stack.layoutMargins = UIEdgeInsets(top: 16, left: 16, bottom: 16, right: 16)
         stack.isLayoutMarginsRelativeArrangement = true
         stack.backgroundColor = UIColor.secondarySystemGroupedBackground
-        stack.layer.cornerRadius = 16
+        stack.layer.cornerRadius = 18
         contentStack.addArrangedSubview(stack)
     }
 
-    private func makeText(_ value: String) -> UILabel {
+    private func addSwitchRow(title: String, subtitle: String, isOn: Bool, action: Selector) {
+        let titleLabel = makeText(title, size: 16, weight: .semibold)
+        let subtitleLabel = makeText(subtitle, size: 13, weight: .regular, color: .secondaryLabel)
+        let labels = UIStackView(arrangedSubviews: [titleLabel, subtitleLabel])
+        labels.axis = .vertical
+        labels.spacing = 3
+
+        let toggle = UISwitch()
+        toggle.isOn = isOn
+        toggle.addTarget(self, action: action, for: .valueChanged)
+
+        let row = UIStackView(arrangedSubviews: [labels, toggle])
+        row.axis = .horizontal
+        row.alignment = .center
+        row.spacing = 12
+        row.layoutMargins = UIEdgeInsets(top: 16, left: 16, bottom: 16, right: 16)
+        row.isLayoutMarginsRelativeArrangement = true
+        row.backgroundColor = UIColor.secondarySystemGroupedBackground
+        row.layer.cornerRadius = 18
+        contentStack.addArrangedSubview(row)
+    }
+
+    private func makeText(_ value: String, size: CGFloat = 16, weight: UIFont.Weight = .semibold, color: UIColor = .label) -> UILabel {
         let label = UILabel()
         label.text = value
-        label.font = UIFont.systemFont(ofSize: 16, weight: .semibold)
+        label.font = UIFont.systemFont(ofSize: size, weight: weight)
+        label.textColor = color
         label.numberOfLines = 0
         return label
     }
 
-    private enum ButtonStyle {
-        case primary
-        case secondary
-        case plain
+    private func makeLargeAction(_ title: String, subtitle: String, color: UIColor) -> UIButton {
+        let button = makeButton("\(title)\n\(subtitle)", style: .plain)
+        button.contentHorizontalAlignment = .left
+        button.backgroundColor = color.withAlphaComponent(0.12)
+        button.tintColor = color
+        button.titleLabel?.font = UIFont.systemFont(ofSize: 17, weight: .bold)
+        button.contentEdgeInsets = UIEdgeInsets(top: 16, left: 16, bottom: 16, right: 16)
+        return button
+    }
+
+    private func makeOptionButton(_ option: Option, selected: Bool) -> UIButton {
+        let button = makeButton("\(option.key). \(option.text)", style: selected ? .primary : .plain)
+        button.contentHorizontalAlignment = .left
+        button.accessibilityIdentifier = option.key
+        button.layer.borderWidth = selected ? 0 : 1
+        button.layer.borderColor = UIColor.separator.cgColor
+        return button
     }
 
     private func makeButton(_ title: String, style: ButtonStyle) -> UIButton {
@@ -269,8 +381,8 @@ final class ViewController: UIViewController {
         button.setTitle(title, for: .normal)
         button.titleLabel?.font = UIFont.systemFont(ofSize: 15, weight: .semibold)
         button.titleLabel?.numberOfLines = 0
-        button.layer.cornerRadius = 14
-        button.contentEdgeInsets = UIEdgeInsets(top: 12, left: 12, bottom: 12, right: 12)
+        button.layer.cornerRadius = 16
+        button.contentEdgeInsets = UIEdgeInsets(top: 13, left: 14, bottom: 13, right: 14)
         switch style {
         case .primary:
             button.backgroundColor = UIColor.systemBlue
@@ -281,12 +393,16 @@ final class ViewController: UIViewController {
         case .plain:
             button.backgroundColor = UIColor.secondarySystemGroupedBackground
             button.tintColor = UIColor.label
+        case .danger:
+            button.backgroundColor = UIColor.systemRed.withAlphaComponent(0.12)
+            button.tintColor = UIColor.systemRed
         }
         return button
     }
 
     @objc private func tabTapped(_ sender: UIButton) {
         autoTimer?.invalidate()
+        feedbackText = nil
         page = Page(rawValue: sender.tag) ?? .home
         render()
     }
@@ -296,6 +412,7 @@ final class ViewController: UIViewController {
         order = Array(questions.indices)
         currentIndex = 0
         selectedAnswers.removeAll()
+        feedbackText = nil
         page = .practice
         render()
     }
@@ -305,6 +422,7 @@ final class ViewController: UIViewController {
         order = Array(questions.indices).shuffled()
         currentIndex = 0
         selectedAnswers.removeAll()
+        feedbackText = nil
         page = .practice
         render()
     }
@@ -312,6 +430,7 @@ final class ViewController: UIViewController {
     @objc private func answerTapped(_ sender: UIButton) {
         guard let key = sender.accessibilityIdentifier else { return }
         selectedAnswers = Set([key])
+        feedbackText = nil
         render()
     }
 
@@ -319,19 +438,48 @@ final class ViewController: UIViewController {
         guard !questions.isEmpty else { return }
         let question = questions[order[currentIndex]]
         let correct = selectedAnswers == question.answer
-        if !correct {
-            wrongQuestions.append(question)
-        }
-        let title = correct ? "\u{6b63}\u{786e}" : "\u{9519}\u{8bef}"
-        let message = correct ? "\u{7b54}\u{5bf9}\u{540e}\u{5df2}\u{81ea}\u{52a8}\u{8fdb}\u{5165}\u{4e0b}\u{4e00}\u{9898}\u{3002}" : question.explanation
-        let alert = UIAlertController(title: title, message: message, preferredStyle: .alert)
-        alert.addAction(UIAlertAction(title: "\u{77e5}\u{9053}\u{4e86}", style: .default))
-        present(alert, animated: true)
-        if correct && currentIndex < order.count - 1 {
-            autoTimer?.invalidate()
-            autoTimer = Timer.scheduledTimer(withTimeInterval: 0.8, repeats: false) { [weak self] _ in
-                self?.nextQuestion()
+        if correct {
+            if autoNextEnabled {
+                advanceAfterCorrectAnswer()
+            } else {
+                feedbackText = "\u{7b54}\u{5bf9}\u{4e86}"
+                feedbackIsPositive = true
+                render()
             }
+        } else {
+            wrongQuestions.append(question)
+            feedbackText = "\u{7b54}\u{9519}\u{4e86}\u{ff1a}\(question.explanation)"
+            feedbackIsPositive = false
+            render()
+        }
+    }
+
+    private func advanceAfterCorrectAnswer() {
+        guard currentIndex < order.count - 1 else {
+            feedbackText = "\u{5df2}\u{5b8c}\u{6210}\u{672c}\u{7ec4}\u{7ec3}\u{4e60}"
+            feedbackIsPositive = true
+            render()
+            return
+        }
+        selectedAnswers.removeAll()
+        feedbackText = nil
+        autoTimer?.invalidate()
+        autoTimer = Timer.scheduledTimer(withTimeInterval: 0.16, repeats: false) { [weak self] _ in
+            guard let self else { return }
+            self.currentIndex += 1
+            self.renderSlideToNext()
+        }
+    }
+
+    private func renderSlideToNext() {
+        clearStack(contentStack)
+        renderTabs()
+        renderPractice()
+        contentStack.transform = CGAffineTransform(translationX: 28, y: 0)
+        contentStack.alpha = 0
+        UIView.animate(withDuration: 0.28, delay: 0, options: [.curveEaseOut, .allowUserInteraction]) {
+            self.contentStack.transform = .identity
+            self.contentStack.alpha = 1
         }
     }
 
@@ -339,28 +487,39 @@ final class ViewController: UIViewController {
         guard !order.isEmpty else { return }
         currentIndex = min(currentIndex + 1, order.count - 1)
         selectedAnswers.removeAll()
+        feedbackText = nil
         page = .practice
-        render()
+        renderSlideToNext()
     }
 
     @objc private func importTapped() {
         let text = importTextView?.text.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        let prompt = text.isEmpty ? "\u{5bfc}\u{5165}\u{7684}\u{6837}\u{672c}\u{9898}\u{ff1f}" : text
-        questions = [
-            Question(
-                prompt: prompt,
-                options: [
-                    Option(key: "A", text: "\u{9009}\u{9879}A"),
-                    Option(key: "B", text: "\u{9009}\u{9879}B"),
-                    Option(key: "C", text: "\u{9009}\u{9879}C"),
-                    Option(key: "D", text: "\u{9009}\u{9879}D")
-                ],
-                answer: Set(["A"]),
-                explanation: "\u{5bfc}\u{5165}\u{9898}\u{9ed8}\u{8ba4}\u{7b54}\u{6848}\u{4e3a} A\u{ff0c}\u{540e}\u{7eed}\u{4f1a}\u{7ee7}\u{7eed}\u{8865}\u{5145}\u{6821}\u{5bf9}\u{529f}\u{80fd}\u{3002}",
-                kind: "\u{5bfc}\u{5165}\u{9898}"
-            )
-        ]
+        let parsed = QuestionParser.parse(text)
+        guard !parsed.isEmpty else {
+            feedbackText = "\u{672a}\u{8bc6}\u{522b}\u{5230}\u{9898}\u{76ee}\u{ff0c}\u{8bf7}\u{68c0}\u{67e5}\u{683c}\u{5f0f}\u{3002}"
+            feedbackIsPositive = false
+            page = .practice
+            render()
+            return
+        }
+        questions = parsed
+        order = Array(questions.indices)
+        currentIndex = 0
+        selectedAnswers.removeAll()
         wrongQuestions.removeAll()
-        startSequential()
+        feedbackText = "\u{5df2}\u{5bfc}\u{5165} \(parsed.count) \u{9898}"
+        feedbackIsPositive = true
+        page = .practice
+        render()
+    }
+
+    @objc private func clearWrongQuestions() {
+        wrongQuestions.removeAll()
+        render()
+    }
+
+    @objc private func autoNextChanged(_ sender: UISwitch) {
+        autoNextEnabled = sender.isOn
+        render()
     }
 }

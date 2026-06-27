@@ -14,8 +14,9 @@ workflows:
       - name: Verify app files
         script: |
           test -f ios/QuizTool/QuizTool/ViewController.swift
+          test -f ios/QuizTool/QuizTool/QuestionParser.swift
           test -f ios/QuizTool/QuizTool/Info.plist
-          grep -q "QuizNativeV5" ios/QuizTool/QuizTool/Info.plist
+          grep -q "QuizNativeV6" ios/QuizTool/QuizTool/Info.plist
           test -f ios/QuizTool/QuizTool/Assets.xcassets/AppIcon.appiconset/Icon-60-60@3x.png
       - name: Set up code signing settings
         script: |
@@ -48,6 +49,6 @@ workflows:
             echo "No IPA exported"
             exit 1
           fi
-          mv "$IPA_PATH" build/ipa/QuizNativeV5.ipa
+          mv "$IPA_PATH" build/ipa/QuizNativeV6.ipa
     artifacts:
-      - build/ipa/QuizNativeV5.ipa
+      - build/ipa/QuizNativeV6.ipa

@@ -12,6 +12,7 @@
 		01A000000000000000000003 /* ViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 01B000000000000000000003 /* ViewController.swift */; };
 		01A000000000000000000004 /* app in Resources */ = {isa = PBXBuildFile; fileRef = 01B000000000000000000005 /* app */; };
 		01A000000000000000000005 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 01B000000000000000000007 /* Assets.xcassets */; };
+		01A000000000000000000006 /* QuestionParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = 01B000000000000000000008 /* QuestionParser.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -22,6 +23,7 @@
 		01B000000000000000000005 /* app */ = {isa = PBXFileReference; lastKnownFileType = folder; name = app; path = ../../../app; sourceTree = "<group>"; };
 		01B000000000000000000006 /* QuizTool.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = QuizTool.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		01B000000000000000000007 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		01B000000000000000000008 /* QuestionParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuestionParser.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -49,6 +51,7 @@
 				01B000000000000000000001 /* AppDelegate.swift */,
 				01B000000000000000000002 /* SceneDelegate.swift */,
 				01B000000000000000000003 /* ViewController.swift */,
+				01B000000000000000000008 /* QuestionParser.swift */,
 				01B000000000000000000004 /* Info.plist */,
 				01B000000000000000000007 /* Assets.xcassets */,
 				01B000000000000000000005 /* app */,
@@ -138,6 +141,7 @@
 				01A000000000000000000001 /* AppDelegate.swift in Sources */,
 				01A000000000000000000002 /* SceneDelegate.swift in Sources */,
 				01A000000000000000000003 /* ViewController.swift in Sources */,
+				01A000000000000000000006 /* QuestionParser.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -155,7 +159,7 @@
 				INFOPLIST_FILE = QuizTool/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
 				PRODUCT_BUNDLE_IDENTIFIER = app.calcite4884.lyra3161;
-				PRODUCT_NAME = QuizNativeV5;
+				PRODUCT_NAME = QuizNativeV6;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = 1;
 			};
@@ -172,7 +176,7 @@
 				INFOPLIST_FILE = QuizTool/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
 				PRODUCT_BUNDLE_IDENTIFIER = app.calcite4884.lyra3161;
-				PRODUCT_NAME = QuizNativeV5;
+				PRODUCT_NAME = QuizNativeV6;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = 1;
 			};
