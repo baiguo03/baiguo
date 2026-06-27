@@ -52,6 +52,13 @@ button {
   padding: 18px 4px 14px;
 }
 
+.topbar-meta {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+}
+
 .large-title {
   margin: 0;
   font-size: 34px;
@@ -76,6 +83,11 @@ button {
   font-size: 13px;
   font-weight: 700;
   white-space: nowrap;
+}
+
+.session-pill {
+  color: var(--muted);
+  font-size: 11px;
 }
 
 .progress-card,
@@ -334,6 +346,28 @@ button {
 .panel {
   padding: 16px;
   margin-bottom: 14px;
+}
+
+.error-panel {
+  margin-bottom: 14px;
+  padding: 14px 16px;
+  border-radius: var(--radius);
+  background: rgba(255, 59, 48, 0.09);
+  border: 1px solid rgba(255, 59, 48, 0.22);
+}
+
+.error-title {
+  font-size: 15px;
+  font-weight: 780;
+  color: var(--red);
+}
+
+.error-text {
+  margin-top: 6px;
+  color: #8a1f17;
+  font-size: 13px;
+  line-height: 1.45;
+  word-break: break-word;
 }
 
 .option-grid {

@@ -1,11 +1,12 @@
 import { loadApiConfig, saveApiConfig, testApiConnection } from "./api-config.js";
 import { QUESTION_TYPES, createId } from "./models.js";
 import { parseQuestionText } from "./parser.js";
-import { buildPracticeOrder, checkAnswer, createAnswerRecord, shouldAutoAdvance } from "./quiz-engine.js";
+import { buildPracticeOrder, createAnswerRecord, shouldAutoAdvance } from "./quiz-engine.js";
 import { sampleQuestions } from "./sample-data.js";
 import { clearStore, exportBackup, getAllItems, saveItem, saveItems } from "./storage.js";
 
 const app = document.querySelector("#app");
+const sessionId = `boot_${Date.now().toString(36)}`;
 
 const state = {
   view: "library",
@@ -21,11 +22,26 @@ const state = {
   selectedAnswer: null,
   result: null,
   notice: "",
+  error: "",
   autoAdvanceTimer: null,
 };
 
+function safeJson(value, fallback) {
+  try {
+    return JSON.parse(value);
+  } catch {
+    return fallback;
+  }
+}
+
 function iconForType(type) {
-  return { single: "单", multiple: "多", judge: "判", blank: "填", short: "简" }[type] || "题";
+  return {
+    single: "A",
+    multiple: "M",
+    judge: "J",
+    blank: "B",
+    short: "S",
+  }[type] || "?";
 }
 
 function colorForIndex(index) {
@@ -42,34 +58,20 @@ function setNotice(message) {
   }, 2400);
 }
 
-async function init() {
-  state.questions = await getAllItems("questions");
-  state.papers = await getAllItems("papers");
-  state.reviewItems = await getAllItems("reviewItems");
-
-  if (!state.questions.length) {
-    state.questions = sampleQuestions;
-    await saveItems("questions", state.questions);
-    const paper = {
-      id: createId("paper"),
-      title: "样本练习卷",
-      mode: "practice",
-      durationMinutes: 45,
-      questionIds: state.questions.map((question) => question.id),
-      createdAt: new Date().toISOString(),
-    };
-    state.papers = [paper];
-    await saveItem("papers", paper);
-  }
-
+function setError(message) {
+  state.error = message;
   render();
 }
 
-function navigate(view) {
-  clearAutoAdvance();
-  state.view = view;
-  state.notice = "";
-  render();
+function clearError() {
+  state.error = "";
+}
+
+function clearAutoAdvance() {
+  if (state.autoAdvanceTimer) {
+    window.clearTimeout(state.autoAdvanceTimer);
+    state.autoAdvanceTimer = null;
+  }
 }
 
 function currentPaper() {
@@ -82,11 +84,9 @@ function questionsForPaper(paper) {
   return ids.map((id) => state.questions.find((question) => question.id === id)).filter(Boolean);
 }
 
-function clearAutoAdvance() {
-  if (state.autoAdvanceTimer) {
-    window.clearTimeout(state.autoAdvanceTimer);
-    state.autoAdvanceTimer = null;
-  }
+function isSelected(key) {
+  if (Array.isArray(state.selectedAnswer)) return state.selectedAnswer.includes(key);
+  return state.selectedAnswer === key;
 }
 
 function page(title, subtitle, body) {
@@ -97,29 +97,44 @@ function page(title, subtitle, body) {
           <h1 class="large-title">${title}</h1>
           ${subtitle ? `<p class="caption">${subtitle}</p>` : ""}
         </div>
-        ${state.notice ? `<div class="pill">${state.notice}</div>` : ""}
+        <div class="topbar-meta">
+          ${state.notice ? `<div class="pill">${state.notice}</div>` : ""}
+          <div class="session-pill">${sessionId}</div>
+        </div>
       </header>
+      ${state.error ? renderErrorPanel() : ""}
       ${body}
     </main>
     ${tabs()}
   `;
 }
 
+function renderErrorPanel() {
+  return `
+    <section class="error-panel">
+      <div class="error-title">应用启动失败</div>
+      <div class="error-text">${state.error}</div>
+    </section>
+  `;
+}
+
 function tabs() {
   const items = [
-    ["library", "▦", "题库"],
-    ["practice", "✎", "刷题"],
-    ["wrong", "✓", "错题"],
-    ["settings", "⚙", "设置"],
+    ["library", "题库"],
+    ["practice", "练习"],
+    ["wrong", "错题"],
+    ["settings", "设置"],
   ];
   return `
     <nav class="bottom-tabs">
       ${items
-        .map(([view, icon, label]) => `
-          <button class="tab ${state.view === view ? "active" : ""}" data-nav="${view}">
-            <span>${icon}</span>${label}
-          </button>
-        `)
+        .map(
+          ([view, label]) => `
+            <button class="tab ${state.view === view ? "active" : ""}" data-nav="${view}">
+              <span>${label}</span>
+            </button>
+          `,
+        )
         .join("")}
     </nav>
   `;
@@ -134,7 +149,7 @@ function renderLibrary() {
       const count = paper.questionIds.length;
       return `
         <div class="cell paper-cell">
-          <div class="tile-icon ${colorForIndex(index)}">卷</div>
+          <div class="tile-icon ${colorForIndex(index)}">${count}</div>
           <div class="cell-main">
             <div class="cell-title">${paper.title}</div>
             <div class="cell-sub">${count} 题 · ${paper.mode === "exam" ? "模拟考试" : "练习模式"}</div>
@@ -150,7 +165,7 @@ function renderLibrary() {
 
   return page(
     "刷题",
-    "导入资料，校对题库，然后开始练习。",
+    "导入文档，校对题库，然后开始练习。",
     `
       <section class="progress-card">
         <div class="progress-row">
@@ -172,18 +187,18 @@ function renderLibrary() {
 function renderImport() {
   return page(
     "导入",
-    "支持 PDF/Word 抽取后的文本、TXT、Markdown、Excel/CSV 文本。",
+    "支持从 PDF、Word、TXT、Markdown、CSV 等文档抽取后粘贴。",
     `
       <section class="upload-card">
         <div class="field">
-          <label>粘贴从 PDF/Word 抽取出的题目文本</label>
-          <textarea class="textarea" id="importText" placeholder="例如：1.题干（） A. ... B. ... C. ... D. ..."></textarea>
+          <label>题目文本</label>
+          <textarea class="textarea" id="importText" placeholder="例如：1. 题干 A. ... B. ... C. ... D. ..."></textarea>
         </div>
         <div class="button-row">
           <button class="secondary" id="loadSample">填入样本</button>
           <button class="primary" id="parseText">开始解析</button>
         </div>
-        <p class="small">第一版先处理可复制文本。PDF 文件可用工具抽取文字后粘贴；后续接入后端可直接上传。</p>
+        <p class="small">先把 PDF/Word 里的文字抽出来再粘贴。后续也可以接上传入口。</p>
       </section>
       ${state.parsedQuestions.length ? renderParseSummary() : ""}
     `,
@@ -195,7 +210,7 @@ function renderParseSummary() {
     <div class="section-label">解析结果</div>
     <section class="group">
       <div class="cell">
-        <div class="tile-icon blue">题</div>
+        <div class="tile-icon blue">${state.parsedQuestions.length}</div>
         <div class="cell-main">
           <div class="cell-title">识别到 ${state.parsedQuestions.length} 道题</div>
           <div class="cell-sub">${state.parsedWarnings.length} 条需要校对的提示</div>
@@ -213,41 +228,45 @@ function renderReview() {
   }
 
   const cards = state.parsedQuestions
-    .map((question, index) => `
-      <section class="editor-card" data-editor="${index}">
-        <div class="question-meta">
-          <span>第 ${question.sourceNumber || index + 1} 题</span>
-          <span>${question.warnings?.length ? question.warnings.join("，") : "待校对"}</span>
-        </div>
-        <div class="field">
-          <label>题型</label>
-          <select class="select" data-edit="${index}" data-field="type">
-            ${Object.entries(QUESTION_TYPES).map(([key, label]) => `<option value="${key}" ${question.type === key ? "selected" : ""}>${label}</option>`).join("")}
-          </select>
-        </div>
-        <div class="field">
-          <label>题干</label>
-          <textarea class="textarea" data-edit="${index}" data-field="prompt">${question.prompt}</textarea>
-        </div>
-        <div class="field">
-          <label>选项（每行一个，如 A. 选项）</label>
-          <textarea class="textarea" data-edit="${index}" data-field="options">${question.options.map((option) => `${option.key}. ${option.text}`).join("\n")}</textarea>
-        </div>
-        <div class="field">
-          <label>答案</label>
-          <input class="input" data-edit="${index}" data-field="answer" value="${Array.isArray(question.answer) ? question.answer.join(",") : question.answer}">
-        </div>
-        <div class="field">
-          <label>解析</label>
-          <textarea class="textarea" data-edit="${index}" data-field="explanation">${question.explanation || ""}</textarea>
-        </div>
-      </section>
-    `)
+    .map(
+      (question, index) => `
+        <section class="editor-card" data-editor="${index}">
+          <div class="question-meta">
+            <span>第 ${question.sourceNumber || index + 1} 题</span>
+            <span>${question.warnings?.length ? question.warnings.join("，") : "待校对"}</span>
+          </div>
+          <div class="field">
+            <label>题型</label>
+            <select class="select" data-edit="${index}" data-field="type">
+              ${Object.entries(QUESTION_TYPES)
+                .map(([key, label]) => `<option value="${key}" ${question.type === key ? "selected" : ""}>${label}</option>`)
+                .join("")}
+            </select>
+          </div>
+          <div class="field">
+            <label>题干</label>
+            <textarea class="textarea" data-edit="${index}" data-field="prompt">${question.prompt}</textarea>
+          </div>
+          <div class="field">
+            <label>选项（每行一个，例如 A. 选项）</label>
+            <textarea class="textarea" data-edit="${index}" data-field="options">${question.options.map((option) => `${option.key}. ${option.text}`).join("\n")}</textarea>
+          </div>
+          <div class="field">
+            <label>答案</label>
+            <input class="input" data-edit="${index}" data-field="answer" value="${Array.isArray(question.answer) ? question.answer.join(",") : question.answer}">
+          </div>
+          <div class="field">
+            <label>解析</label>
+            <textarea class="textarea" data-edit="${index}" data-field="explanation">${question.explanation || ""}</textarea>
+          </div>
+        </section>
+      `,
+    )
     .join("");
 
   return page(
     "校对",
-    "AI 和本地解析都可能出错，发布前先确认题目。",
+    "发布前先确认题型和答案。",
     `${cards}<button class="primary" id="publishPaper">发布为试卷</button>`,
   );
 }
@@ -258,11 +277,11 @@ function renderPractice() {
   const question = questions[state.activeIndex];
 
   if (!question) {
-    return page("刷题", "选择一套试卷开始。", `<section class="panel empty">暂无可刷题目，请先导入或发布试卷。</section>`);
+    return page("练习", "先选一套试卷开始。", `<section class="panel empty">暂无可练题目，请先导入或发布试卷。</section>`);
   }
 
   const input = ["blank", "short"].includes(question.type)
-    ? `<input class="input" id="answerInput" placeholder="${question.type === "short" ? "输入你的简答，提交后自评" : "输入答案"}">`
+    ? `<input class="input" id="answerInput" placeholder="${question.type === "short" ? "输入简答后提交" : "输入答案"}">`
     : `<div class="option-grid">${question.options.map((option) => `
         <button class="option-row ${isSelected(option.key) ? "selected" : ""}" data-answer="${option.key}">
           <span class="choice-dot">${option.key}</span>
@@ -291,14 +310,9 @@ function renderPractice() {
   );
 }
 
-function isSelected(key) {
-  if (Array.isArray(state.selectedAnswer)) return state.selectedAnswer.includes(key);
-  return state.selectedAnswer === key;
-}
-
 function renderAnswerResult(question) {
   const cls = state.result.correct === true ? "correct" : state.result.correct === false ? "wrong" : "";
-  const verdict = state.result.correct === true ? "回答正确" : state.result.correct === false ? "回答错误" : "简答题请对照参考答案自评";
+  const verdict = state.result.correct === true ? "回答正确" : state.result.correct === false ? "回答错误" : "简答题请参考答案自判";
   return `
     <section class="result-box ${cls}">
       <strong>${verdict}</strong><br>
@@ -326,14 +340,14 @@ function renderWrong() {
     })
     .join("");
 
-  return page("错题", "自动记录答错题，后续用于复习。", `<section class="group">${rows || `<div class="empty">还没有错题</div>`}</section>`);
+  return page("错题", "系统会自动记录答错题目，后续用于复习。", `<section class="group">${rows || `<div class="empty">还没有错题</div>`}</section>`);
 }
 
 function renderSettings() {
   const config = loadApiConfig();
   return page(
     "设置",
-    "配置 AI/API、备份和诊断。",
+    "配置 API、备份和诊断。",
     `
       <section class="panel">
         <div class="field">
@@ -360,11 +374,11 @@ function renderSettings() {
           <button class="secondary" id="testApi">测试连接</button>
           <button class="primary" id="saveApi">保存配置</button>
         </div>
-        <p class="small">建议正式使用后端代理，手机端只保存自有服务地址。第一版支持本机保存配置。</p>
+        <p class="small">建议通过后端代理使用正式接口，手机端仅保存你自己的配置。</p>
       </section>
       <section class="group">
         <button class="cell" id="exportBackup">
-          <div class="tile-icon green">备</div>
+          <div class="tile-icon green">导</div>
           <div class="cell-main">
             <div class="cell-title">导出题库备份</div>
             <div class="cell-sub">生成 JSON 备份文本</div>
@@ -384,7 +398,19 @@ function renderSettings() {
   );
 }
 
+function renderStartup() {
+  app.innerHTML = `
+    <main class="app-shell">
+      <section class="panel">
+        <div class="large-title" style="font-size:28px">刷题工具</div>
+        <p class="caption">正在启动...</p>
+      </section>
+    </main>
+  `;
+}
+
 function render() {
+  if (!app) return;
   const viewMap = {
     library: renderLibrary,
     import: renderImport,
@@ -395,6 +421,13 @@ function render() {
   };
   app.innerHTML = (viewMap[state.view] || renderLibrary)();
   bindEvents();
+}
+
+function navigate(view) {
+  clearAutoAdvance();
+  state.view = view;
+  state.notice = "";
+  render();
 }
 
 function bindEvents() {
@@ -409,9 +442,9 @@ function bindEvents() {
   });
 
   app.querySelector("#loadSample")?.addEventListener("click", () => {
-    app.querySelector("#importText").value = `一、单项选择题（共 50 题，每题 2 分）
-1.温抗体型的自身免疫溶血性贫血的抗体类型一般为（） A. IgA B. IgM C. IgD D. IgG
-2.凝血因子 Ⅶ 主要参与哪条凝血途径（） A. 内源性凝血途径 B. 外源性凝血途径 C. 共同凝血途径 D. 纤溶途径`;
+    app.querySelector("#importText").value = `一、单项选择题
+1. 温抗体型自身免疫性溶血性贫血的抗体类型通常为（ ） A. IgA B. IgM C. IgD D. IgG
+2. 凝血因子 II 主要参与哪条凝血途径（ ） A. 内源性凝血途径 B. 外源性凝血途径 C. 共同凝血途径 D. 纤溶途径`;
   });
 
   app.querySelector("#parseText")?.addEventListener("click", () => {
@@ -445,6 +478,8 @@ function bindEvents() {
 function updateParsedQuestion(field) {
   const index = Number(field.dataset.edit);
   const question = state.parsedQuestions[index];
+  if (!question) return;
+
   const value = field.value;
   if (field.dataset.field === "options") {
     question.options = value
@@ -452,7 +487,7 @@ function updateParsedQuestion(field) {
       .map((line) => line.trim())
       .filter(Boolean)
       .map((line, optionIndex) => {
-        const match = line.match(/^([A-H])[\.\．、]\s*(.*)$/i);
+        const match = line.match(/^([A-H])[.、．)\s]*(.*)$/i);
         return {
           key: match ? match[1].toUpperCase() : String.fromCharCode(65 + optionIndex),
           text: match ? match[2].trim() : line,
@@ -508,6 +543,8 @@ function startPractice(paperId, mode = "sequential") {
 function selectAnswer(answer) {
   const paper = currentPaper();
   const question = questionsForPaper(paper)[state.activeIndex];
+  if (!question) return;
+
   if (question.type === "multiple") {
     const selected = Array.isArray(state.selectedAnswer) ? [...state.selectedAnswer] : [];
     state.selectedAnswer = selected.includes(answer) ? selected.filter((item) => item !== answer) : [...selected, answer];
@@ -522,6 +559,8 @@ async function submitAnswer() {
   const paper = currentPaper();
   const questions = questionsForPaper(paper);
   const question = questions[state.activeIndex];
+  if (!question) return;
+
   const typed = app.querySelector("#answerInput")?.value;
   const answer = ["blank", "short"].includes(question.type) ? typed : state.selectedAnswer;
   const record = createAnswerRecord(question, answer, 0);
@@ -598,4 +637,43 @@ async function clearData() {
   setNotice("已清理");
 }
 
+async function init() {
+  try {
+    renderStartup();
+    state.questions = await getAllItems("questions");
+    state.papers = await getAllItems("papers");
+    state.reviewItems = await getAllItems("reviewItems");
+
+    if (!state.questions.length) {
+      state.questions = sampleQuestions;
+      await saveItems("questions", state.questions);
+      const paper = {
+        id: createId("paper"),
+        title: "样本练习卷",
+        mode: "practice",
+        durationMinutes: 45,
+        questionIds: state.questions.map((question) => question.id),
+        createdAt: new Date().toISOString(),
+      };
+      state.papers = [paper];
+      await saveItem("papers", paper);
+    }
+
+    clearError();
+    render();
+  } catch (error) {
+    setError(error?.message || String(error));
+  }
+}
+
+window.addEventListener("error", (event) => {
+  setError(event?.error?.message || event.message || "未知运行错误");
+});
+
+window.addEventListener("unhandledrejection", (event) => {
+  const reason = event?.reason;
+  setError(reason?.message || String(reason || "Promise rejected"));
+});
+
+window.__QUIZ_TOOL_BOOT__ = sessionId;
 init();

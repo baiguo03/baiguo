@@ -1,15 +1,22 @@
 import { createId, normalizeAnswer } from "./models.js";
 
 export function checkAnswer(question, userAnswer) {
+  if (!question) return false;
   if (question.type === "short") return null;
+
   if (question.type === "multiple") {
-    return JSON.stringify(normalizeAnswer(question.answer)) === JSON.stringify(normalizeAnswer(userAnswer));
+    return (
+      JSON.stringify(normalizeAnswer(question.answer)) ===
+      JSON.stringify(normalizeAnswer(userAnswer))
+    );
   }
+
   if (question.type === "blank") {
     const accepted = Array.isArray(question.answer) ? question.answer : [question.answer];
     const normalizedUser = String(userAnswer ?? "").trim().toLowerCase();
     return accepted.some((item) => String(item).trim().toLowerCase() === normalizedUser);
   }
+
   return String(question.answer ?? "").trim().toUpperCase() === String(userAnswer ?? "").trim().toUpperCase();
 }
 

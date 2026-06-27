@@ -1,11 +1,11 @@
 import { createId, validateQuestion } from "./models.js";
 
 const TYPE_RULES = [
-  { pattern: /单项选择|单选/i, type: "single" },
-  { pattern: /多项选择|多选/i, type: "multiple" },
+  { pattern: /单选|单项/i, type: "single" },
+  { pattern: /多选/i, type: "multiple" },
   { pattern: /判断/i, type: "judge" },
   { pattern: /填空/i, type: "blank" },
-  { pattern: /简答|问答/i, type: "short" },
+  { pattern: /简答/i, type: "short" },
 ];
 
 export function normalizeText(text) {
@@ -23,7 +23,7 @@ export function detectTypeFromHeading(line, fallback = "single") {
 
 export function splitQuestionBlocks(text) {
   const normalized = normalizeText(text);
-  const matches = [...normalized.matchAll(/(?:^|\n)\s*(\d{1,4})[\.．、]\s*/g)];
+  const matches = [...normalized.matchAll(/(?:^|\n)\s*(\d{1,4})[.。．、\s]*/g)];
   if (!matches.length) return [];
 
   return matches
@@ -39,7 +39,7 @@ export function splitQuestionBlocks(text) {
 }
 
 export function parseOptions(raw) {
-  const optionMatches = [...raw.matchAll(/(?:^|\s)([A-H])[\.\．、]\s*/g)];
+  const optionMatches = [...raw.matchAll(/(?:^|\s)([A-H])[\.\、．\)]\s*/g)];
   if (!optionMatches.length) return { prompt: raw.trim(), options: [] };
 
   const prompt = raw.slice(0, optionMatches[0].index).trim();
@@ -87,7 +87,7 @@ export function parseQuestionText(text) {
   return {
     questions,
     warnings: questions.flatMap((question) =>
-      question.warnings.map((warning) => `第 ${question.sourceNumber || "?"} 题：${warning}`),
+      question.warnings.map((warning) => `第${question.sourceNumber || "?"}题：${warning}`),
     ),
   };
 }

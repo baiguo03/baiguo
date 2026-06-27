@@ -2,6 +2,8 @@ const DB_NAME = "ios_quiz_tool";
 const DB_VERSION = 1;
 const STORES = ["questions", "papers", "attempts", "reviewItems", "settings"];
 
+const memoryFallback = new Map();
+
 function openDb() {
   return new Promise((resolve, reject) => {
     if (!("indexedDB" in window)) {
@@ -13,7 +15,9 @@ function openDb() {
     request.onupgradeneeded = () => {
       const db = request.result;
       for (const store of STORES) {
-        if (!db.objectStoreNames.contains(store)) db.createObjectStore(store, { keyPath: "id" });
+        if (!db.objectStoreNames.contains(store)) {
+          db.createObjectStore(store, { keyPath: "id" });
+        }
       }
     };
     request.onsuccess = () => resolve(request.result);
@@ -33,11 +37,20 @@ async function withStore(storeName, mode, callback) {
 }
 
 function readLocalList(storeName) {
-  return JSON.parse(localStorage.getItem(storeName) || "[]");
+  try {
+    const raw = localStorage.getItem(storeName);
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return memoryFallback.get(storeName) || [];
+  }
 }
 
 function writeLocalList(storeName, list) {
-  localStorage.setItem(storeName, JSON.stringify(list));
+  try {
+    localStorage.setItem(storeName, JSON.stringify(list));
+  } catch {
+    memoryFallback.set(storeName, list);
+  }
 }
 
 export async function saveItem(storeName, item) {
@@ -74,7 +87,11 @@ export async function clearStore(storeName) {
   try {
     await withStore(storeName, "readwrite", (store) => store.clear());
   } catch {
-    localStorage.removeItem(storeName);
+    try {
+      localStorage.removeItem(storeName);
+    } catch {
+      memoryFallback.delete(storeName);
+    }
   }
 }
 
