@@ -19,17 +19,31 @@ project = read("ios/QuizTool/QuizTool.xcodeproj/project.pbxproj")
 plist = read("ios/QuizTool/QuizTool/Info.plist")
 yaml = read("codemagic.yaml")
 
-for old in ["刷题工具", "QuizNativeV8", "QuizNativeV7", "QuizNativeV6", "QuizNativeV5", "QuizNativeV4", "QuizNativeV3", "QuizNativeV2"]:
+for old in [
+    "QuizNativeV9",
+    "QuizNativeV8",
+    "QuizNativeV7",
+    "QuizNativeV6",
+    "QuizNativeV5",
+    "QuizNativeV4",
+    "QuizNativeV3",
+    "QuizNativeV2",
+]:
     require(old not in view + parser + project + plist + yaml, f"old marker remains: {old}")
 
-require("PRODUCT_NAME = QuizNativeV9;" in project, "missing QuizNativeV9 product")
+require("PRODUCT_NAME = QuizNativeV10;" in project, "missing QuizNativeV10 product")
 require("ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;" in project, "missing AppIcon setting")
 require("QuestionParser.swift in Sources" in project, "parser is not in sources")
-require("QuizNativeV9.ipa" in yaml, "Codemagic artifact is not V9")
-require("&#x4e91;&#x9898;V9" in plist, "display name is not 云题V9")
+require("insertBreaksBeforeInlineQuestionStarts" in parser, "parser does not split inline question starts")
+require("stripAnswerSummary" in parser, "parser does not remove answer summary blocks")
+require("QuizNativeV10.ipa" in yaml, "Codemagic artifact is not V10")
+require("&#x4e91;&#x9898;V10" in plist, "display name is not Yunti V10")
 require("autoNextEnabled" in view and "UISwitch" in view, "auto-next switch not wired")
-require("renderSlideToNext" in view and "UIView.animate" in view, "slide transition not wired")
-require("translationX: 0, y: 4" in view and "withDuration: 0.18" in view, "next transition is still too large")
+require("shuffleOptionsEnabled" in view and "optionOrders" in view, "option shuffle setting/order cache missing")
+require("UIRectEdge.left" in view and "UIRectEdge.right" in view, "side swipe gestures missing")
+require("renderSlideToNext" in view and "UIView.animate" in view, "next transition not wired")
+require("withDuration: 0.28" in view and "delay: 0.1" in view, "next transition is not calm enough")
+require("withTimeInterval: 0.38" in view or "withTimeInterval: 0.4" in view, "auto-next confirmation pause missing")
 require("makeTabButton" in view and "centeredParagraphStyle" in view, "wechat-like bottom tab missing")
 require("if autoNextEnabled" in view and "submitAnswer()" in view, "auto-next does not submit on option tap")
 require("if !autoNextEnabled" in view, "submit button still shows in auto-next mode")

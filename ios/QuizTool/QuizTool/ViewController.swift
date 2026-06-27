@@ -33,11 +33,13 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate {
     private var feedbackText: String?
     private var feedbackIsPositive = true
     private var autoNextEnabled = true
+    private var shuffleOptionsEnabled = true
 
     private var papers: [Paper] = []
     private var activePaperIndex = 0
     private var wrongQuestions: [Question] = []
     private var order: [Int] = []
+    private var optionOrders: [String: [String]] = [:]
     private var currentIndex = 0
     private var selectedAnswers = Set<String>()
     private var modeTitle = "\u{987a}\u{5e8f}\u{7ec3}\u{4e60}"
@@ -57,6 +59,7 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate {
         view.backgroundColor = UIColor.systemGroupedBackground
         configureSeedData()
         configureLayout()
+        configureSwipeGestures()
         render(animated: false)
     }
 
@@ -126,6 +129,16 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate {
         ])
     }
 
+    private func configureSwipeGestures() {
+        let leftEdge = UIScreenEdgePanGestureRecognizer(target: self, action: #selector(handleLeftEdgeSwipe(_:)))
+        leftEdge.edges = UIRectEdge.left
+        view.addGestureRecognizer(leftEdge)
+
+        let rightEdge = UIScreenEdgePanGestureRecognizer(target: self, action: #selector(handleRightEdgeSwipe(_:)))
+        rightEdge.edges = UIRectEdge.right
+        view.addGestureRecognizer(rightEdge)
+    }
+
     private func render(animated: Bool = true) {
         let changes = {
             self.clearStack(self.contentStack)
@@ -171,7 +184,7 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate {
     }
 
     private func renderHome() {
-        addTitle("\u{4e91}\u{9898} V9", "\u{7ba1}\u{7406}\u{591a}\u{4efd}\u{8bd5}\u{9898}\u{ff0c}\u{70b9}\u{5f00}\u{9898}\u{5e93}\u{540e}\u{518d}\u{5f00}\u{59cb}\u{7ec3}\u{4e60}\u{3002}")
+        addTitle("\u{4e91}\u{9898} V10", "\u{7ba1}\u{7406}\u{591a}\u{4efd}\u{8bd5}\u{9898}\u{ff0c}\u{70b9}\u{5f00}\u{9898}\u{5e93}\u{540e}\u{518d}\u{5f00}\u{59cb}\u{7ec3}\u{4e60}\u{3002}")
         addStatsRow()
         addSectionHeader("\u{5feb}\u{6377}\u{5165}\u{53e3}")
         addListGroup([
@@ -226,9 +239,9 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate {
             addFeedback(feedbackText, positive: feedbackIsPositive)
         }
         addQuestionCard(question)
-        for option in question.options {
+        for (index, option) in optionsForCurrentQuestion(question).enumerated() {
             let selected = selectedAnswers.contains(option.key)
-            let button = makeOptionButton(option, selected: selected)
+            let button = makeOptionButton(option, displayKey: displayKey(for: index), selected: selected)
             button.addTarget(self, action: #selector(answerTapped(_:)), for: .touchUpInside)
             contentStack.addArrangedSubview(button)
         }
@@ -237,9 +250,9 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate {
             submit.addTarget(self, action: #selector(submitAnswer), for: .touchUpInside)
             contentStack.addArrangedSubview(submit)
         }
-        let next = makeButton("\u{4e0b}\u{4e00}\u{9898}", style: .secondary)
-        next.addTarget(self, action: #selector(nextQuestion), for: .touchUpInside)
-        contentStack.addArrangedSubview(next)
+        let hint = makeText("\u{4ece}\u{5c4f}\u{5e55}\u{5de6}\u{8fb9}\u{7f18}\u{6ed1}\u{52a8}\u{8fd4}\u{56de}\u{4e0a}\u{4e00}\u{9898}\u{ff0c}\u{53f3}\u{8fb9}\u{7f18}\u{6ed1}\u{52a8}\u{8fdb}\u{5165}\u{4e0b}\u{4e00}\u{9898}\u{3002}", size: 13, weight: .regular, color: .secondaryLabel)
+        hint.textAlignment = .center
+        contentStack.addArrangedSubview(hint)
     }
 
     private func renderWrong() {
@@ -259,8 +272,9 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate {
     private func renderProfile() {
         addTitle("\u{6211}\u{7684}", "\u{504f}\u{597d}\u{8bbe}\u{7f6e}\u{548c}\u{7248}\u{672c}\u{4fe1}\u{606f}\u{3002}")
         addSwitchRow(title: "\u{7b54}\u{5bf9}\u{540e}\u{81ea}\u{52a8}\u{4e0b}\u{4e00}\u{9898}", subtitle: "\u{6253}\u{5f00}\u{540e}\u{4e0d}\u{5f39}\u{7b54}\u{5bf9}\u{63d0}\u{793a}\u{ff0c}\u{76f4}\u{63a5}\u{8fdb}\u{5165}\u{4e0b}\u{4e00}\u{9898}\u{3002}", isOn: autoNextEnabled, action: #selector(autoNextChanged(_:)))
+        addSwitchRow(title: "\u{9009}\u{9879}\u{968f}\u{673a}\u{6392}\u{5e8f}", subtitle: "\u{6bcf}\u{9053}\u{9898}\u{9996}\u{6b21}\u{6253}\u{5f00}\u{65f6}\u{968f}\u{673a}\u{ff0c}\u{8fd4}\u{56de}\u{540c}\u{9898}\u{65f6}\u{4fdd}\u{6301}\u{987a}\u{5e8f}\u{4e0d}\u{53d8}\u{3002}", isOn: shuffleOptionsEnabled, action: #selector(shuffleOptionsChanged(_:)))
         addListGroup([
-            infoRow("\u{5e94}\u{7528}\u{7248}\u{672c}", subtitle: "\u{4e91}\u{9898} V9 / build 10"),
+            infoRow("\u{5e94}\u{7528}\u{7248}\u{672c}", subtitle: "\u{4e91}\u{9898} V10 / build 11"),
             infoRow("\u{6587}\u{4ef6}\u{5bfc}\u{5165}", subtitle: "TXT / PDF"),
             infoRow("API", subtitle: "\u{9884}\u{7559}\u{5165}\u{53e3}")
         ])
@@ -358,6 +372,23 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate {
         addCard([chip, prompt])
     }
 
+    private func optionsForCurrentQuestion(_ question: Question) -> [Option] {
+        let questionIndex = order.isEmpty ? currentIndex : order[currentIndex]
+        let cacheKey = "\(activePaperIndex)-\(questionIndex)"
+        if let keys = optionOrders[cacheKey] {
+            return keys.compactMap { key in question.options.first { $0.key == key } }
+        }
+
+        let options = shuffleOptionsEnabled ? question.options.shuffled() : question.options
+        optionOrders[cacheKey] = options.map(\.key)
+        return options
+    }
+
+    private func displayKey(for index: Int) -> String {
+        let keys = ["A", "B", "C", "D", "E", "F"]
+        return index < keys.count ? keys[index] : "\(index + 1)"
+    }
+
     private func addProgress() {
         let progress = UIProgressView(progressViewStyle: .default)
         progress.progress = order.isEmpty ? 0 : Float(currentIndex + 1) / Float(order.count)
@@ -422,8 +453,8 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate {
         return label
     }
 
-    private func makeOptionButton(_ option: Option, selected: Bool) -> UIButton {
-        let title = selected ? "\u{2713}  \(option.key). \(option.text)" : "\(option.key). \(option.text)"
+    private func makeOptionButton(_ option: Option, displayKey: String, selected: Bool) -> UIButton {
+        let title = selected ? "\u{2713}  \(displayKey). \(option.text)" : "\(displayKey). \(option.text)"
         let button = makeButton(title, style: .plain)
         button.contentHorizontalAlignment = .left
         button.accessibilityIdentifier = option.key
@@ -519,6 +550,7 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate {
         activePaperIndex = index
         let questions = activeQuestions
         order = random ? Array(questions.indices).shuffled() : Array(questions.indices)
+        optionOrders.removeAll()
         modeTitle = random ? "\u{968f}\u{673a}\u{7ec3}\u{4e60}" : "\u{987a}\u{5e8f}\u{7ec3}\u{4e60}"
         currentIndex = 0
         selectedAnswers.removeAll()
@@ -565,12 +597,13 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate {
             render()
             return
         }
-        selectedAnswers.removeAll()
         feedbackText = nil
+        render()
         autoTimer?.invalidate()
-        autoTimer = Timer.scheduledTimer(withTimeInterval: 0.12, repeats: false) { [weak self] _ in
+        autoTimer = Timer.scheduledTimer(withTimeInterval: 0.38, repeats: false) { [weak self] _ in
             guard let self else { return }
             self.currentIndex += 1
+            self.selectedAnswers.removeAll()
             self.renderSlideToNext()
         }
     }
@@ -579,11 +612,28 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate {
         clearStack(contentStack)
         renderTabs()
         renderPractice()
-        contentStack.transform = CGAffineTransform(translationX: 0, y: 4)
-        contentStack.alpha = 0.72
-        UIView.animate(withDuration: 0.18, delay: 0, options: [.curveEaseInOut, .allowUserInteraction]) {
+        contentStack.transform = CGAffineTransform(translationX: 0, y: 2)
+        contentStack.alpha = 0.82
+        UIView.animate(withDuration: 0.28, delay: 0, options: [.curveEaseInOut, .allowUserInteraction]) {
             self.contentStack.transform = .identity
             self.contentStack.alpha = 1
+        }
+    }
+
+    private func renderCalmQuestionChange() {
+        UIView.animate(withDuration: 0.18, delay: 0, options: [.curveEaseInOut, .allowUserInteraction]) {
+            self.contentStack.alpha = 0.72
+            self.contentStack.transform = CGAffineTransform(translationX: 0, y: 2)
+        } completion: { _ in
+            self.clearStack(self.contentStack)
+            self.renderTabs()
+            self.renderPractice()
+            self.contentStack.alpha = 0.82
+            self.contentStack.transform = CGAffineTransform(translationX: 0, y: 2)
+            UIView.animate(withDuration: 0.28, delay: 0.1, options: [.curveEaseInOut, .allowUserInteraction]) {
+                self.contentStack.alpha = 1
+                self.contentStack.transform = .identity
+            }
         }
     }
 
@@ -593,7 +643,26 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate {
         selectedAnswers.removeAll()
         feedbackText = nil
         page = .practice
-        renderSlideToNext()
+        renderCalmQuestionChange()
+    }
+
+    @objc private func previousQuestion() {
+        guard !order.isEmpty else { return }
+        currentIndex = max(currentIndex - 1, 0)
+        selectedAnswers.removeAll()
+        feedbackText = nil
+        page = .practice
+        renderCalmQuestionChange()
+    }
+
+    @objc private func handleLeftEdgeSwipe(_ gesture: UIScreenEdgePanGestureRecognizer) {
+        guard page == .practice, gesture.state == .recognized else { return }
+        previousQuestion()
+    }
+
+    @objc private func handleRightEdgeSwipe(_ gesture: UIScreenEdgePanGestureRecognizer) {
+        guard page == .practice, gesture.state == .recognized else { return }
+        nextQuestion()
     }
 
     @objc private func importTapped() {
@@ -614,6 +683,7 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate {
         papers.append(paper)
         activePaperIndex = papers.count - 1
         order = Array(parsed.indices)
+        optionOrders.removeAll()
         currentIndex = 0
         selectedAnswers.removeAll()
         feedbackText = "\u{5df2}\u{5bfc}\u{5165} \(parsed.count) \u{9898}"
@@ -666,6 +736,14 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate {
 
     @objc private func autoNextChanged(_ sender: UISwitch) {
         autoNextEnabled = sender.isOn
+        render()
+    }
+
+    @objc private func shuffleOptionsChanged(_ sender: UISwitch) {
+        shuffleOptionsEnabled = sender.isOn
+        optionOrders.removeAll()
+        selectedAnswers.removeAll()
+        feedbackText = nil
         render()
     }
 }

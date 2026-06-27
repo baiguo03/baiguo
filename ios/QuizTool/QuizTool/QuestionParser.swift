@@ -15,15 +15,30 @@ struct Question {
 
 enum QuestionParser {
     static func parse(_ rawText: String) -> [Question] {
-        let normalized = rawText
+        let normalized = stripAnswerSummary(rawText)
             .replacingOccurrences(of: "\r\n", with: "\n")
             .replacingOccurrences(of: "\r", with: "\n")
         let blocks = splitQuestionBlocks(normalized)
         return blocks.compactMap(parseBlock)
     }
 
+    private static func stripAnswerSummary(_ text: String) -> String {
+        let markers = [
+            "\u{5355}\u{9009}\u{9898}\u{7b54}\u{6848}",
+            "\u{591a}\u{9009}\u{9898}\u{7b54}\u{6848}",
+            "\u{5224}\u{65ad}\u{9898}\u{7b54}\u{6848}",
+            "\u{53c2}\u{8003}\u{7b54}\u{6848}",
+            "\u{7b54}\u{6848}\u{6c47}\u{603b}"
+        ]
+        guard let first = markers.compactMap({ text.range(of: $0) }).map(\.lowerBound).min() else {
+            return text
+        }
+        return String(text[..<first])
+    }
+
     private static func splitQuestionBlocks(_ text: String) -> [String] {
-        let lines = text
+        let prepared = insertBreaksBeforeInlineQuestionStarts(text)
+        let lines = prepared
             .components(separatedBy: .newlines)
             .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
             .filter { !$0.isEmpty }
@@ -42,6 +57,14 @@ enum QuestionParser {
             blocks.append(current.joined(separator: " "))
         }
         return blocks.isEmpty ? [text] : blocks
+    }
+
+    private static func insertBreaksBeforeInlineQuestionStarts(_ text: String) -> String {
+        let optionMarker = "\\s*A\\s*[\\.\\x{ff0e}\\x{3001}:\\x{ff1a}]"
+        let pattern = "(\\s+)(\\d{1,3}[\\.\\x{3001}\\x{ff0e}]\\s*)(?=[^\\n]{0,180}\(optionMarker))"
+        guard let regex = try? NSRegularExpression(pattern: pattern) else { return text }
+        let range = NSRange(text.startIndex..<text.endIndex, in: text)
+        return regex.stringByReplacingMatches(in: text, range: range, withTemplate: "\n$2")
     }
 
     private static func isQuestionStart(_ line: String) -> Bool {
