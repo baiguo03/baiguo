@@ -5,7 +5,7 @@ workflows:
     instance_type: mac_mini_m2
     environment:
       ios_signing:
-        distribution_type: enterprise
+        distribution_type: ad_hoc
         bundle_identifier: app.calcite4884.lyra3161
       vars:
         XCODE_PROJECT: "ios/QuizTool/QuizTool.xcodeproj"
