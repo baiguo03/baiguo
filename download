@@ -1,0 +1,10 @@
+.superpowers/
+work/*.txt
+work/*.json
+node_modules/
+dist/
+build/
+DerivedData/
+*.xcarchive
+*.ipa
+.DS_Store
