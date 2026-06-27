@@ -1,9 +1,14 @@
 import UIKit
 
 final class ViewController: UIViewController {
+    private struct Option {
+        let key: String
+        let text: String
+    }
+
     private struct Question {
         let prompt: String
-        let options: [(key: String, text: String)]
+        let options: [Option]
         let answer: Set<String>
         let explanation: String
         let kind: String
@@ -25,14 +30,22 @@ final class ViewController: UIViewController {
     private var questions: [Question] = [
         Question(
             prompt: "Warm antibody autoimmune hemolytic anemia is usually related to which antibody type?",
-            options: [("A", "IgA"), ("B", "IgM"), ("C", "IgD"), ("D", "IgG")],
+            options: [
+                Option(key: "A", text: "IgA"),
+                Option(key: "B", text: "IgM"),
+                Option(key: "C", text: "IgD"),
+                Option(key: "D", text: "IgG")
+            ],
             answer: Set(["D"]),
             explanation: "Warm antibody autoimmune hemolytic anemia is commonly IgG mediated.",
             kind: "Single Choice"
         ),
         Question(
             prompt: "AI parsed questions should still be checked before publishing.",
-            options: [("A", "True"), ("B", "False")],
+            options: [
+                Option(key: "A", text: "True"),
+                Option(key: "B", text: "False")
+            ],
             answer: Set(["A"]),
             explanation: "AI output needs manual review before use.",
             kind: "Judge"
@@ -350,7 +363,12 @@ final class ViewController: UIViewController {
         questions = [
             Question(
                 prompt: prompt,
-                options: [("A", "Option A"), ("B", "Option B"), ("C", "Option C"), ("D", "Option D")],
+                options: [
+                    Option(key: "A", text: "Option A"),
+                    Option(key: "B", text: "Option B"),
+                    Option(key: "C", text: "Option C"),
+                    Option(key: "D", text: "Option D")
+                ],
                 answer: Set(["A"]),
                 explanation: "Imported questions default to answer A in this native smoke-test version.",
                 kind: "Imported"
