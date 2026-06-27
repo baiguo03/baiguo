@@ -32,7 +32,9 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate, PHPicker
         case search = 5
         case apiConfig = 6
         case practiceMode = 7
+        case questionList = 8
         case practice = 9
+        case questionEdit = 10
     }
 
     private enum ButtonStyle {
@@ -71,6 +73,13 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate, PHPicker
     private var order: [Int] = []
     private var optionOrders: [String: [String]] = [:]
     private var currentIndex = 0
+    private var editingPaperIndex = 0
+    private var editingQuestionIndex = 0
+    private var editPromptField: UITextView?
+    private var editOptionsField: UITextView?
+    private var editAnswerField: UITextField?
+    private var editExplanationField: UITextView?
+    private var editKindField: UITextField?
     private var selectedAnswers = Set<String>()
     private var modeTitle = "\u{987a}\u{5e8f}\u{7ec3}\u{4e60}"
     private var page: Page = .home
@@ -230,8 +239,12 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate, PHPicker
                 self.renderAPIConfig()
             case .practiceMode:
                 self.renderPracticeMode()
+            case .questionList:
+                self.renderQuestionList()
             case .practice:
                 self.renderPractice()
+            case .questionEdit:
+                self.renderQuestionEditor()
             }
             self.view.layoutIfNeeded()
         }
@@ -256,7 +269,9 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate, PHPicker
             (.profile, "person", "\u{6211}\u{7684}")
         ]
         for item in items {
-            let selected = item.0 == page || (page == .practice && item.0 == .library)
+            let selected = item.0 == page ||
+                (page == .practice && item.0 == .library) ||
+                ((page == .questionList || page == .questionEdit) && item.0 == .library)
             let button = makeTabButton(icon: item.1, title: item.2, selected: selected)
             button.tag = item.0.rawValue
             button.addTarget(self, action: #selector(tabTapped(_:)), for: .touchUpInside)
@@ -331,7 +346,7 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate, PHPicker
         if revealAnswer {
             addAnswerComparison(question)
         }
-        if !autoNextEnabled {
+        if !autoNextEnabled || question.answer.count > 1 {
             let submit = makeButton("\u{63d0}\u{4ea4}\u{7b54}\u{6848}", style: .primary)
             submit.addTarget(self, action: #selector(submitAnswer), for: .touchUpInside)
             contentStack.addArrangedSubview(submit)
@@ -406,6 +421,57 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate, PHPicker
             row("\u{968f}\u{673a}\u{7ec3}\u{4e60}", subtitle: "\u{6253}\u{4e71}\u{9898}\u{76ee}\u{987a}\u{5e8f}\u{ff0c}\u{9002}\u{5408}\u{590d}\u{4e60}", action: #selector(selectRandomMode)),
             row("\u{9519}\u{9898}\u{7ec3}\u{4e60}", subtitle: wrongQuestions.isEmpty ? "\u{6682}\u{65e0}\u{9519}\u{9898}" : "\(wrongQuestions.count) \u{9898}\u{5f85}\u{5de9}\u{56fa}", action: #selector(startWrongPractice))
         ])
+    }
+
+    private func renderQuestionList() {
+        guard papers.indices.contains(editingPaperIndex) else {
+            setPage(.library, animated: false)
+            return
+        }
+        let paper = papers[editingPaperIndex]
+        addTopBar(title: "\u{7f16}\u{8f91}\u{9898}\u{76ee}", chipTitle: "\u{8fd4}\u{56de}", action: #selector(backToLibrary))
+        addEmptyState(paper.title, "\(paper.questions.count) \u{9898}\u{ff0c}\u{70b9}\u{51fb}\u{5355}\u{9898}\u{53ef}\u{4fee}\u{6539}\u{9898}\u{5e72}\u{3001}\u{9009}\u{9879}\u{3001}\u{7b54}\u{6848}\u{548c}\u{89e3}\u{6790}\u{3002}")
+        var rows: [UIView] = []
+        for index in paper.questions.indices {
+            let question = paper.questions[index]
+            rows.append(row("\(index + 1). \(question.prompt)", subtitle: "\(question.kind) \u{00b7} \u{7b54}\u{6848} \(question.answer.sorted().joined(separator: ","))", tag: index, action: #selector(questionEditTapped(_:))))
+        }
+        addListGroup(rows)
+    }
+
+    private func renderQuestionEditor() {
+        guard
+            papers.indices.contains(editingPaperIndex),
+            papers[editingPaperIndex].questions.indices.contains(editingQuestionIndex)
+        else {
+            setPage(.questionList, animated: false)
+            return
+        }
+        let question = papers[editingPaperIndex].questions[editingQuestionIndex]
+        addTopBar(title: "\u{7f16}\u{8f91} \(editingQuestionIndex + 1)", chipTitle: "\u{8fd4}\u{56de}", action: #selector(backToQuestionList))
+        if let feedbackText {
+            addFeedback(feedbackText, positive: feedbackIsPositive)
+        }
+        editPromptField = makeTextEditor(text: question.prompt, height: 120)
+        editOptionsField = makeTextEditor(text: question.options.map { "\($0.key). \($0.text)" }.joined(separator: "\n"), height: 160)
+        editAnswerField = makeInput(placeholder: "\u{7b54}\u{6848}\u{ff0c}\u{4f8b}\u{5982} A \u{6216} AC", text: question.answer.sorted().joined(), secure: false)
+        editExplanationField = makeTextEditor(text: question.explanation, height: 120)
+        editKindField = makeInput(placeholder: "\u{9898}\u{578b}", text: question.kind, secure: false)
+
+        addSectionHeader("\u{9898}\u{5e72}")
+        if let editPromptField { contentStack.addArrangedSubview(editPromptField) }
+        addSectionHeader("\u{9009}\u{9879}\u{ff08}\u{6bcf}\u{884c}\u{4e00}\u{4e2a}\u{ff0c}\u{5982} A. xxx\u{ff09}")
+        if let editOptionsField { contentStack.addArrangedSubview(editOptionsField) }
+        addSectionHeader("\u{7b54}\u{6848}")
+        if let editAnswerField { contentStack.addArrangedSubview(editAnswerField) }
+        addSectionHeader("\u{89e3}\u{6790}")
+        if let editExplanationField { contentStack.addArrangedSubview(editExplanationField) }
+        addSectionHeader("\u{9898}\u{578b}")
+        if let editKindField { contentStack.addArrangedSubview(editKindField) }
+
+        let save = makeButton("\u{4fdd}\u{5b58}\u{4fee}\u{6539}", style: .primary)
+        save.addTarget(self, action: #selector(saveQuestionEdit), for: .touchUpInside)
+        contentStack.addArrangedSubview(save)
     }
 
     private func addTitle(_ title: String, _ subtitle: String) {
@@ -545,6 +611,44 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate, PHPicker
     }
 
     private func paperRow(_ paper: Paper, index: Int) -> UIView {
+        return makeSwipeDeletePaperRow(paper, index: index)
+    }
+
+    private func makeSwipeDeletePaperRow(_ paper: Paper, index: Int) -> UIView {
+        let container = UIView()
+        container.clipsToBounds = true
+        container.tag = index
+        container.heightAnchor.constraint(greaterThanOrEqualToConstant: 76).isActive = true
+
+        let deleteButton = UIButton(type: .system)
+        deleteButton.setTitle("\u{5220}\u{9664}", for: .normal)
+        deleteButton.titleLabel?.font = UIFont.systemFont(ofSize: 14, weight: .bold)
+        deleteButton.backgroundColor = UIColor.systemRed
+        deleteButton.tintColor = UIColor.white
+        deleteButton.tag = index
+        deleteButton.addTarget(self, action: #selector(paperDeleteButtonTapped(_:)), for: .touchUpInside)
+        deleteButton.translatesAutoresizingMaskIntoConstraints = false
+
+        let foreground = paperForegroundView(paper, index: index)
+        foreground.translatesAutoresizingMaskIntoConstraints = false
+        foreground.tag = index
+
+        container.addSubview(deleteButton)
+        container.addSubview(foreground)
+        NSLayoutConstraint.activate([
+            deleteButton.topAnchor.constraint(equalTo: container.topAnchor),
+            deleteButton.trailingAnchor.constraint(equalTo: container.trailingAnchor),
+            deleteButton.bottomAnchor.constraint(equalTo: container.bottomAnchor),
+            deleteButton.widthAnchor.constraint(equalToConstant: 82),
+            foreground.topAnchor.constraint(equalTo: container.topAnchor),
+            foreground.leadingAnchor.constraint(equalTo: container.leadingAnchor),
+            foreground.trailingAnchor.constraint(equalTo: container.trailingAnchor),
+            foreground.bottomAnchor.constraint(equalTo: container.bottomAnchor)
+        ])
+        return container
+    }
+
+    private func paperForegroundView(_ paper: Paper, index: Int) -> UIView {
         let source = paper.source.uppercased()
         let badgeText = source.contains("PDF") ? "PDF" : (source.contains("TXT") ? "TXT" : (source.contains("IMG") || source.contains("OCR") ? "IMG" : "DOC"))
         let badge = makeBadge(text: badgeText, color: badgeColor(for: badgeText))
@@ -568,12 +672,12 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate, PHPicker
         row.spacing = 12
         row.layoutMargins = UIEdgeInsets(top: 12, left: 14, bottom: 12, right: 14)
         row.isLayoutMarginsRelativeArrangement = true
+        row.backgroundColor = cardBackgroundColor
         row.tag = index
         let tap = UITapGestureRecognizer(target: self, action: #selector(paperTapped(_:)))
         row.addGestureRecognizer(tap)
-        let deleteSwipe = UISwipeGestureRecognizer(target: self, action: #selector(paperDeleteSwiped(_:)))
-        deleteSwipe.direction = .left
-        row.addGestureRecognizer(deleteSwipe)
+        let longPress = UILongPressGestureRecognizer(target: self, action: #selector(paperLongPressed(_:)))
+        row.addGestureRecognizer(longPress)
         let deletePan = UIPanGestureRecognizer(target: self, action: #selector(paperDeletePanned(_:)))
         deletePan.cancelsTouchesInView = false
         row.addGestureRecognizer(deletePan)
@@ -791,6 +895,18 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate, PHPicker
         return field
     }
 
+    private func makeTextEditor(text: String, height: CGFloat) -> UITextView {
+        let textView = UITextView()
+        textView.text = text
+        textView.font = UIFont.systemFont(ofSize: 15)
+        textView.backgroundColor = cardBackgroundColor
+        textView.layer.cornerRadius = 15
+        textView.textContainerInset = UIEdgeInsets(top: 12, left: 12, bottom: 12, right: 12)
+        textView.autocorrectionType = .no
+        textView.heightAnchor.constraint(equalToConstant: height).isActive = true
+        return textView
+    }
+
     private func makeOptionButton(_ option: Option, displayKey: String, selected: Bool, correct: Bool = false, wrong: Bool = false) -> UIButton {
         let button = UIButton(type: .system)
         button.accessibilityIdentifier = option.key
@@ -942,12 +1058,22 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate, PHPicker
         setPage(.practiceMode, animated: false)
     }
 
+    @objc private func questionEditTapped(_ sender: UITapGestureRecognizer) {
+        guard let index = sender.view?.tag else { return }
+        editingQuestionIndex = index
+        setPage(.questionEdit, animated: false)
+    }
+
     @objc private func backToProfile() {
         setPage(.profile, animated: false)
     }
 
     @objc private func backToLibrary() {
         setPage(.library, animated: false)
+    }
+
+    @objc private func backToQuestionList() {
+        setPage(.questionList, animated: false)
     }
 
     @objc private func searchChanged(_ sender: UITextField) {
@@ -989,15 +1115,23 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate, PHPicker
     @objc private func paperTapped(_ sender: UITapGestureRecognizer) {
         guard let index = sender.view?.tag else { return }
         if page == .home {
-            setPage(.library, animated: false)
+            openCurrentPaper()
             return
         }
         startPaper(index: index, random: false)
     }
 
-    @objc private func paperDeleteSwiped(_ sender: UISwipeGestureRecognizer) {
-        guard let index = sender.view?.tag, papers.indices.contains(index) else { return }
-        confirmDeletePaper(at: index)
+    @objc private func paperLongPressed(_ sender: UILongPressGestureRecognizer) {
+        guard sender.state == .began, let index = sender.view?.tag, papers.indices.contains(index) else { return }
+        if page == .home {
+            openPaperSwitchSheet()
+        } else {
+            openPaperActions(for: index)
+        }
+    }
+
+    @objc private func paperDeleteButtonTapped(_ sender: UIButton) {
+        deletePaper(at: sender.tag)
     }
 
     @objc private func paperDeletePanned(_ sender: UIPanGestureRecognizer) {
@@ -1006,18 +1140,81 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate, PHPicker
         switch sender.state {
         case .changed:
             if translation.x < 0, abs(translation.x) > abs(translation.y) {
-                row.transform = CGAffineTransform(translationX: max(translation.x * 0.18, -18), y: 0)
+                row.transform = CGAffineTransform(translationX: max(translation.x, -82), y: 0)
+            } else if translation.x > 0 {
+                row.transform = CGAffineTransform(translationX: min(translation.x - 82, 0), y: 0)
             }
         case .ended:
-            row.transform = .identity
-            if translation.x < -44, abs(translation.x) > abs(translation.y) * 1.3 {
-                confirmDeletePaper(at: index)
+            if translation.x < -38, abs(translation.x) > abs(translation.y) * 1.2 {
+                revealPaperDelete(row)
+            } else {
+                hidePaperDelete(row)
             }
         case .cancelled, .failed:
-            row.transform = .identity
+            hidePaperDelete(row)
         default:
             break
         }
+    }
+
+    private func revealPaperDelete(_ row: UIView) {
+        UIView.animate(withDuration: 0.18, delay: 0, options: [.curveEaseOut, .allowUserInteraction]) {
+            row.transform = CGAffineTransform(translationX: -82, y: 0)
+        }
+    }
+
+    private func hidePaperDelete(_ row: UIView) {
+        UIView.animate(withDuration: 0.18, delay: 0, options: [.curveEaseOut, .allowUserInteraction]) {
+            row.transform = .identity
+        }
+    }
+
+    private func openPaperSwitchSheet() {
+        let alert = UIAlertController(title: "\u{5207}\u{6362}\u{9898}\u{5e93}", message: nil, preferredStyle: .actionSheet)
+        for index in papers.indices {
+            let paper = papers[index]
+            let mark = index == activePaperIndex ? "\u{2713} " : ""
+            alert.addAction(UIAlertAction(title: "\(mark)\(paper.title)", style: .default) { [weak self] _ in
+                self?.switchActivePaper(index)
+            })
+        }
+        alert.addAction(UIAlertAction(title: "\u{53d6}\u{6d88}", style: .cancel))
+        present(alert, animated: true)
+    }
+
+    private func switchActivePaper(_ index: Int) {
+        guard papers.indices.contains(index) else { return }
+        activePaperIndex = index
+        focusedPracticeQuestions = nil
+        currentIndex = 0
+        order = Array(activeQuestions.indices)
+        selectedAnswers.removeAll()
+        feedbackText = nil
+        optionOrders.removeAll()
+        savePersistedState()
+        setPage(.home, animated: false)
+    }
+
+    private func openPaperActions(for index: Int) {
+        let paper = papers[index]
+        let alert = UIAlertController(title: paper.title, message: nil, preferredStyle: .actionSheet)
+        alert.addAction(UIAlertAction(title: "\u{5f00}\u{59cb}\u{7ec3}\u{4e60}", style: .default) { [weak self] _ in
+            self?.startPaper(index: index, random: false)
+        })
+        alert.addAction(UIAlertAction(title: "\u{7f16}\u{8f91}\u{9898}\u{76ee}", style: .default) { [weak self] _ in
+            self?.openQuestionList(for: index)
+        })
+        alert.addAction(UIAlertAction(title: "\u{5220}\u{9664}\u{9898}\u{5e93}", style: .destructive) { [weak self] _ in
+            self?.deletePaper(at: index)
+        })
+        alert.addAction(UIAlertAction(title: "\u{53d6}\u{6d88}", style: .cancel))
+        present(alert, animated: true)
+    }
+
+    private func openQuestionList(for index: Int) {
+        guard papers.indices.contains(index) else { return }
+        editingPaperIndex = index
+        setPage(.questionList, animated: false)
     }
 
     private func confirmDeletePaper(at index: Int) {
@@ -1122,6 +1319,18 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate, PHPicker
 
     @objc private func answerTapped(_ sender: UIButton) {
         guard let key = sender.accessibilityIdentifier else { return }
+        guard !activeQuestions.isEmpty, !order.isEmpty else { return }
+        let question = activeQuestions[order[currentIndex]]
+        if question.answer.count > 1 {
+            if selectedAnswers.contains(key) {
+                selectedAnswers.remove(key)
+            } else {
+                selectedAnswers.insert(key)
+            }
+            feedbackText = nil
+            render()
+            return
+        }
         selectedAnswers = Set([key])
         feedbackText = nil
         if autoNextEnabled {
@@ -1129,6 +1338,74 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate, PHPicker
         } else {
             render()
         }
+    }
+
+    @objc private func saveQuestionEdit() {
+        guard
+            papers.indices.contains(editingPaperIndex),
+            papers[editingPaperIndex].questions.indices.contains(editingQuestionIndex)
+        else { return }
+        let oldQuestion = papers[editingPaperIndex].questions[editingQuestionIndex]
+        let prompt = editPromptField?.text.trimmingCharacters(in: .whitespacesAndNewlines) ?? oldQuestion.prompt
+        let options = parseEditedOptions(editOptionsField?.text ?? "")
+        let answer = normalizeEditedAnswer(editAnswerField?.text ?? "")
+        let explanation = editExplanationField?.text.trimmingCharacters(in: .whitespacesAndNewlines) ?? oldQuestion.explanation
+        let kind = editKindField?.text.trimmingCharacters(in: .whitespacesAndNewlines) ?? oldQuestion.kind
+        guard !prompt.isEmpty, !options.isEmpty, !answer.isEmpty else {
+            feedbackText = "\u{9898}\u{5e72}\u{3001}\u{9009}\u{9879}\u{548c}\u{7b54}\u{6848}\u{4e0d}\u{80fd}\u{4e3a}\u{7a7a}"
+            feedbackIsPositive = false
+            render()
+            return
+        }
+
+        let updatedQuestion = Question(prompt: prompt, options: options, answer: answer, explanation: explanation.isEmpty ? "\u{6682}\u{65e0}\u{89e3}\u{6790}" : explanation, kind: kind.isEmpty ? oldQuestion.kind : kind)
+        var paper = papers[editingPaperIndex]
+        var questions = paper.questions
+        questions[editingQuestionIndex] = updatedQuestion
+        paper = Paper(title: paper.title, source: paper.source, questions: questions)
+        papers[editingPaperIndex] = paper
+        if editingPaperIndex == activePaperIndex {
+            order = Array(paper.questions.indices)
+            currentIndex = min(currentIndex, max(order.count - 1, 0))
+        }
+        wrongQuestions.removeAll { $0.prompt == oldQuestion.prompt }
+        optionOrders.removeAll()
+        selectedAnswers.removeAll()
+        feedbackText = "\u{9898}\u{76ee}\u{5df2}\u{4fdd}\u{5b58}"
+        feedbackIsPositive = true
+        savePersistedState()
+        setPage(.questionList, animated: false)
+    }
+
+    private func parseEditedOptions(_ text: String) -> [Option] {
+        var options: [Option] = []
+        for rawLine in text.components(separatedBy: .newlines) {
+            let line = rawLine.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !line.isEmpty else { continue }
+            let key = String(line.prefix(1)).uppercased()
+            var remainder = String(line.dropFirst()).trimmingCharacters(in: .whitespacesAndNewlines)
+            if let first = remainder.first, ".\u{ff0e}\u{3001}:\u{ff1a}".contains(first) {
+                remainder.removeFirst()
+            }
+            let body = remainder.trimmingCharacters(in: .whitespacesAndNewlines)
+            if ["A", "B", "C", "D", "E", "F"].contains(key), !body.isEmpty {
+                options.append(Option(key: key, text: String(body)))
+            }
+        }
+        return options.isEmpty && !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            ? [Option(key: "A", text: text.trimmingCharacters(in: .whitespacesAndNewlines))]
+            : options
+    }
+
+    private func normalizeEditedAnswer(_ text: String) -> Set<String> {
+        var answer = Set<String>()
+        for char in text.uppercased() {
+            let key = String(char)
+            if ["A", "B", "C", "D", "E", "F"].contains(key) {
+                answer.insert(key)
+            }
+        }
+        return answer
     }
 
     @objc private func submitAnswer() {
