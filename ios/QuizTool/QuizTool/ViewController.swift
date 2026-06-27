@@ -196,16 +196,14 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate, UIGestur
     }
 
     private func renderLibrary() {
-        addTitle("\u{9898}\u{5e93}", "\u{6bcf}\u{4efd}\u{5bfc}\u{5165}\u{7684}\u{8bd5}\u{9898}\u{90fd}\u{4f1a}\u{72ec}\u{7acb}\u{4fdd}\u{7559}\u{3002}")
+        addTopBar(title: "\u{9898}\u{5e93}", chipTitle: "\u{5bfc}\u{5165}", action: #selector(openImportPage))
+        addSearchField()
         var rows: [UIView] = []
         for index in papers.indices {
             let paper = papers[index]
-            rows.append(row(paper.title, subtitle: "\(paper.questions.count) \u{9898}  \u{00b7}  \(paper.source)", tag: index, action: #selector(paperTapped(_:))))
+            rows.append(paperRow(paper, index: index))
         }
         addListGroup(rows)
-        let importButton = makeButton("\u{5bfc}\u{5165}\u{65b0}\u{8bd5}\u{9898}", style: .primary)
-        importButton.addTarget(self, action: #selector(openImportPage), for: .touchUpInside)
-        contentStack.addArrangedSubview(importButton)
     }
 
     private func renderImport() {
@@ -234,7 +232,8 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate, UIGestur
             return
         }
         let question = activeQuestions[order[currentIndex]]
-        addTitle(activePaper.title, "\(modeTitle)  \(currentIndex + 1) / \(order.count)")
+        addTopBar(title: activePaper.title, chipTitle: modeTitle, action: nil)
+        addPracticeMeta()
         addProgress()
         if let feedbackText {
             addFeedback(feedbackText, positive: feedbackIsPositive)
@@ -271,14 +270,11 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate, UIGestur
     }
 
     private func renderProfile() {
-        addTitle("\u{6211}\u{7684}", "\u{504f}\u{597d}\u{8bbe}\u{7f6e}\u{548c}\u{7248}\u{672c}\u{4fe1}\u{606f}\u{3002}")
-        addSwitchRow(title: "\u{7b54}\u{5bf9}\u{540e}\u{81ea}\u{52a8}\u{4e0b}\u{4e00}\u{9898}", subtitle: "\u{6253}\u{5f00}\u{540e}\u{4e0d}\u{5f39}\u{7b54}\u{5bf9}\u{63d0}\u{793a}\u{ff0c}\u{76f4}\u{63a5}\u{8fdb}\u{5165}\u{4e0b}\u{4e00}\u{9898}\u{3002}", isOn: autoNextEnabled, action: #selector(autoNextChanged(_:)))
-        addSwitchRow(title: "\u{9009}\u{9879}\u{968f}\u{673a}\u{6392}\u{5e8f}", subtitle: "\u{6bcf}\u{9053}\u{9898}\u{9996}\u{6b21}\u{6253}\u{5f00}\u{65f6}\u{968f}\u{673a}\u{ff0c}\u{8fd4}\u{56de}\u{540c}\u{9898}\u{65f6}\u{4fdd}\u{6301}\u{987a}\u{5e8f}\u{4e0d}\u{53d8}\u{3002}", isOn: shuffleOptionsEnabled, action: #selector(shuffleOptionsChanged(_:)))
-        addListGroup([
-            infoRow("\u{5e94}\u{7528}\u{7248}\u{672c}", subtitle: "\u{4e91}\u{9898} V10 / build 11"),
-            infoRow("\u{6587}\u{4ef6}\u{5bfc}\u{5165}", subtitle: "TXT / PDF"),
-            infoRow("API", subtitle: "\u{9884}\u{7559}\u{5165}\u{53e3}")
-        ])
+        addTopBar(title: "\u{6211}\u{7684}", chipTitle: "V10", action: nil)
+        contentStack.addArrangedSubview(iconSwitchRow(symbol: "\u{2192}", color: accentColor, title: "\u{7b54}\u{5bf9}\u{540e}\u{81ea}\u{52a8}\u{4e0b}\u{4e00}\u{9898}", subtitle: "\u{7b54}\u{5bf9}\u{76f4}\u{63a5}\u{5207}\u{9898}\u{ff0c}\u{7b54}\u{9519}\u{663e}\u{793a}\u{89e3}\u{6790}", isOn: autoNextEnabled, action: #selector(autoNextChanged(_:))))
+        contentStack.addArrangedSubview(iconSwitchRow(symbol: "A", color: UIColor(red: 0.12, green: 0.47, blue: 0.90, alpha: 1), title: "\u{9009}\u{9879}\u{968f}\u{673a}\u{6392}\u{5e8f}", subtitle: "\u{8fd4}\u{56de}\u{540c}\u{9898}\u{65f6}\u{987a}\u{5e8f}\u{4fdd}\u{6301}\u{4e0d}\u{53d8}", isOn: shuffleOptionsEnabled, action: #selector(shuffleOptionsChanged(_:))))
+        contentStack.addArrangedSubview(iconInfoRow(symbol: "AI", color: UIColor(red: 0.06, green: 0.42, blue: 0.92, alpha: 1), title: "API \u{914d}\u{7f6e}", subtitle: "\u{7528}\u{4e8e}\u{6587}\u{6863}\u{8bc6}\u{522b}\u{548c}\u{89e3}\u{6790}\u{589e}\u{5f3a}"))
+        contentStack.addArrangedSubview(iconInfoRow(symbol: "\u{21bb}", color: UIColor(red: 0.97, green: 0.57, blue: 0.08, alpha: 1), title: "\u{7ec3}\u{4e60}\u{6a21}\u{5f0f}", subtitle: "\u{987a}\u{5e8f}\u{7ec3}\u{4e60} / \u{968f}\u{673a}\u{7ec3}\u{4e60}"))
     }
 
     private func addTitle(_ title: String, _ subtitle: String) {
@@ -289,6 +285,46 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate, UIGestur
         contentStack.addArrangedSubview(titleLabel)
         let subtitleLabel = makeText(subtitle, size: 15, weight: .regular, color: UIColor.secondaryLabel)
         contentStack.addArrangedSubview(subtitleLabel)
+    }
+
+    private func addTopBar(title: String, chipTitle: String?, action: Selector?) {
+        let titleLabel = makeText(title, size: 25, weight: .bold)
+        let spacer = UIView()
+        let row = UIStackView(arrangedSubviews: [titleLabel, spacer])
+        row.axis = .horizontal
+        row.alignment = .center
+        row.spacing = 12
+        spacer.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        if let chipTitle {
+            let chip = makeChip(chipTitle)
+            if let action {
+                chip.addTarget(self, action: action, for: .touchUpInside)
+            }
+            row.addArrangedSubview(chip)
+        }
+        contentStack.addArrangedSubview(row)
+    }
+
+    private func makeChip(_ title: String) -> UIButton {
+        let button = UIButton(type: .system)
+        button.setTitle(title, for: .normal)
+        button.titleLabel?.font = UIFont.systemFont(ofSize: 13, weight: .semibold)
+        button.backgroundColor = cardBackgroundColor.withAlphaComponent(0.82)
+        button.tintColor = UIColor.label
+        button.layer.cornerRadius = 16
+        button.contentEdgeInsets = UIEdgeInsets(top: 8, left: 12, bottom: 8, right: 12)
+        button.setContentHuggingPriority(.required, for: .horizontal)
+        return button
+    }
+
+    private func addPracticeMeta() {
+        let current = makeText("\(currentIndex + 1)", size: 22, weight: .bold)
+        let total = makeText("/ \(order.count)  \(activeQuestions[order[currentIndex]].kind)", size: 15, weight: .regular, color: .secondaryLabel)
+        let row = UIStackView(arrangedSubviews: [current, total])
+        row.axis = .horizontal
+        row.alignment = .firstBaseline
+        row.spacing = 6
+        contentStack.addArrangedSubview(row)
     }
 
     private func addSectionHeader(_ text: String) {
@@ -347,6 +383,108 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate, UIGestur
 
     private func infoRow(_ title: String, subtitle: String) -> UIView {
         row(title, subtitle: subtitle, action: nil)
+    }
+
+    private func addSearchField() {
+        let label = makeText("\u{2315}  \u{641c}\u{7d22}\u{8bd5}\u{5377}", size: 15, weight: .regular, color: .secondaryLabel)
+        label.textAlignment = .center
+        let container = UIStackView(arrangedSubviews: [label])
+        container.alignment = .center
+        container.layoutMargins = UIEdgeInsets(top: 11, left: 14, bottom: 11, right: 14)
+        container.isLayoutMarginsRelativeArrangement = true
+        container.backgroundColor = cardBackgroundColor
+        container.layer.cornerRadius = 15
+        contentStack.addArrangedSubview(container)
+    }
+
+    private func paperRow(_ paper: Paper, index: Int) -> UIView {
+        let badgeText = paper.source.uppercased().contains("PDF") ? "PDF" : (paper.source.uppercased().contains("TXT") ? "TXT" : "DOC")
+        let badge = makeBadge(text: badgeText, color: badgeColor(for: badgeText))
+        let titleLabel = makeText(paper.title, size: 16, weight: .bold)
+        let mode = index == activePaperIndex ? modeTitle : "\u{987a}\u{5e8f}\u{7ec3}\u{4e60}"
+        let progress = "\(min(currentIndex + 1, max(order.count, 1)))/\(max(order.count, 1))"
+        let state = index == activePaperIndex ? "\(progress) \u{00b7} \u{7ee7}\u{7eed}" : "\u{672a}\u{5f00}\u{59cb}"
+        let subtitle = "\(paper.questions.count) \u{9898} \u{00b7} \(mode) \u{00b7} \(state)"
+        let subtitleLabel = makeText(subtitle, size: 13, weight: .regular, color: .secondaryLabel)
+        let labels = UIStackView(arrangedSubviews: [titleLabel, subtitleLabel])
+        labels.axis = .vertical
+        labels.spacing = 3
+        let timeLabel = makeText(index == 0 ? "\u{4eca}\u{5929}" : "\u{6628}\u{5929}", size: 12, weight: .regular, color: .tertiaryLabel)
+        timeLabel.textAlignment = .right
+        let row = UIStackView(arrangedSubviews: [badge, labels, timeLabel])
+        row.axis = .horizontal
+        row.alignment = .center
+        row.spacing = 12
+        row.layoutMargins = UIEdgeInsets(top: 12, left: 14, bottom: 12, right: 14)
+        row.isLayoutMarginsRelativeArrangement = true
+        row.tag = index
+        let tap = UITapGestureRecognizer(target: self, action: #selector(paperTapped(_:)))
+        row.addGestureRecognizer(tap)
+        row.isUserInteractionEnabled = true
+        return row
+    }
+
+    private func makeBadge(text: String, color: UIColor) -> UILabel {
+        let label = makeText(text, size: 12, weight: .bold, color: .white)
+        label.textAlignment = .center
+        label.backgroundColor = color
+        label.layer.cornerRadius = 13
+        label.clipsToBounds = true
+        label.widthAnchor.constraint(equalToConstant: 48).isActive = true
+        label.heightAnchor.constraint(equalToConstant: 48).isActive = true
+        return label
+    }
+
+    private func badgeColor(for text: String) -> UIColor {
+        switch text {
+        case "PDF":
+            return UIColor(red: 0.09, green: 0.74, blue: 0.43, alpha: 1)
+        case "DOC":
+            return UIColor(red: 0.05, green: 0.55, blue: 0.92, alpha: 1)
+        default:
+            return UIColor(red: 0.98, green: 0.62, blue: 0.08, alpha: 1)
+        }
+    }
+
+    private func iconInfoRow(symbol: String, color: UIColor, title: String, subtitle: String) -> UIView {
+        let icon = makeBadge(text: symbol, color: color)
+        let titleLabel = makeText(title, size: 16, weight: .bold)
+        let subtitleLabel = makeText(subtitle, size: 13, weight: .regular, color: .secondaryLabel)
+        let labels = UIStackView(arrangedSubviews: [titleLabel, subtitleLabel])
+        labels.axis = .vertical
+        labels.spacing = 3
+        let arrow = makeText("\u{203a}", size: 20, weight: .regular, color: .tertiaryLabel)
+        let row = UIStackView(arrangedSubviews: [icon, labels, arrow])
+        row.axis = .horizontal
+        row.alignment = .center
+        row.spacing = 12
+        row.layoutMargins = UIEdgeInsets(top: 12, left: 14, bottom: 12, right: 14)
+        row.isLayoutMarginsRelativeArrangement = true
+        row.backgroundColor = cardBackgroundColor.withAlphaComponent(0.82)
+        row.layer.cornerRadius = 18
+        return row
+    }
+
+    private func iconSwitchRow(symbol: String, color: UIColor, title: String, subtitle: String, isOn: Bool, action: Selector) -> UIView {
+        let icon = makeBadge(text: symbol, color: color)
+        let titleLabel = makeText(title, size: 16, weight: .bold)
+        let subtitleLabel = makeText(subtitle, size: 13, weight: .regular, color: .secondaryLabel)
+        let labels = UIStackView(arrangedSubviews: [titleLabel, subtitleLabel])
+        labels.axis = .vertical
+        labels.spacing = 3
+        let toggle = UISwitch()
+        toggle.onTintColor = accentColor
+        toggle.isOn = isOn
+        toggle.addTarget(self, action: action, for: .valueChanged)
+        let row = UIStackView(arrangedSubviews: [icon, labels, toggle])
+        row.axis = .horizontal
+        row.alignment = .center
+        row.spacing = 12
+        row.layoutMargins = UIEdgeInsets(top: 12, left: 14, bottom: 12, right: 14)
+        row.isLayoutMarginsRelativeArrangement = true
+        row.backgroundColor = cardBackgroundColor.withAlphaComponent(0.82)
+        row.layer.cornerRadius = 18
+        return row
     }
 
     private func addListGroup(_ rows: [UIView]) {
