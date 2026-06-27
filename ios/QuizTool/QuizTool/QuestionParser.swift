@@ -15,11 +15,14 @@ struct Question {
 
 enum QuestionParser {
     static func parse(_ rawText: String) -> [Question] {
+        let summaryAnswers = extractAnswerSummaryAnswers(rawText)
         let normalized = stripAnswerSummary(rawText)
             .replacingOccurrences(of: "\r\n", with: "\n")
             .replacingOccurrences(of: "\r", with: "\n")
         let blocks = splitQuestionBlocks(normalized)
-        return blocks.compactMap(parseBlock)
+        return blocks.enumerated().compactMap { index, block in
+            parseBlock(block, fallbackAnswer: summaryAnswers[index + 1])
+        }
     }
 
     private static func stripAnswerSummary(_ text: String) -> String {
@@ -73,11 +76,12 @@ enum QuestionParser {
         return trimmed.contains(".") || trimmed.contains("\u{3001}") || trimmed.contains("\u{ff0e}")
     }
 
-    private static func parseBlock(_ block: String) -> Question? {
+    private static func parseBlock(_ block: String, fallbackAnswer: Set<String>? = nil) -> Question? {
         let compact = collapseWhitespace(block)
         guard !compact.isEmpty else { return nil }
 
         let answer = extractAnswer(from: compact)
+        let resolvedBlockAnswer = answer.isEmpty ? (fallbackAnswer ?? []) : answer
         let explanation = extractExplanation(from: compact)
         let body = removeSuffixLabels(from: compact)
         let optionMatches = optionMarkerMatches(in: body)
@@ -89,7 +93,7 @@ enum QuestionParser {
                     Option(key: "A", text: "\u{6b63}\u{786e}"),
                     Option(key: "B", text: "\u{9519}\u{8bef}")
                 ],
-                answer: answer.isEmpty ? Set(["A"]) : answer,
+                answer: resolvedBlockAnswer.isEmpty ? Set(["A"]) : resolvedBlockAnswer,
                 explanation: explanation,
                 kind: "\u{5224}\u{65ad}\u{9898}"
             )
@@ -108,7 +112,7 @@ enum QuestionParser {
         }
 
         guard !prompt.isEmpty, !options.isEmpty else { return nil }
-        let resolvedAnswer = answer.isEmpty ? Set([options[0].key]) : answer
+        let resolvedAnswer = resolvedBlockAnswer.isEmpty ? Set([options[0].key]) : resolvedBlockAnswer
         let kind = resolvedAnswer.count > 1 ? "\u{591a}\u{9009}\u{9898}" : "\u{5355}\u{9009}\u{9898}"
         return Question(prompt: prompt, options: options, answer: resolvedAnswer, explanation: explanation, kind: kind)
     }
@@ -141,9 +145,51 @@ enum QuestionParser {
         } else {
             answerText = suffix
         }
+        return normalizeAnswerKeys(answerText)
+    }
+
+    private static func extractAnswerSummaryAnswers(_ text: String) -> [Int: Set<String>] {
+        let markers = [
+            "\u{5355}\u{9009}\u{9898}\u{7b54}\u{6848}",
+            "\u{591a}\u{9009}\u{9898}\u{7b54}\u{6848}",
+            "\u{5224}\u{65ad}\u{9898}\u{7b54}\u{6848}",
+            "\u{53c2}\u{8003}\u{7b54}\u{6848}",
+            "\u{7b54}\u{6848}\u{6c47}\u{603b}"
+        ]
+        guard let first = markers.compactMap({ text.range(of: $0) }).min(by: { $0.lowerBound < $1.lowerBound }) else {
+            return [:]
+        }
+        let summary = String(text[first.lowerBound...])
+        let pattern = "(\\d{1,3})\\s*[\\.\\x{3001}\\x{ff0e}:\\x{ff1a}]?\\s*([A-Fa-f]+|\u{6b63}\u{786e}|\u{9519}\u{8bef}|\u{5bf9}|\u{9519}|\u{221a}|\u{2713}|\u{00d7}|\u{2717})"
+        guard let regex = try? NSRegularExpression(pattern: pattern) else { return [:] }
+        let range = NSRange(summary.startIndex..<summary.endIndex, in: summary)
+        var answers: [Int: Set<String>] = [:]
+        for match in regex.matches(in: summary, range: range) {
+            guard
+                let numberRange = Range(match.range(at: 1), in: summary),
+                let answerRange = Range(match.range(at: 2), in: summary),
+                let number = Int(summary[numberRange])
+            else { continue }
+            let keys = normalizeAnswerKeys(String(summary[answerRange]))
+            if !keys.isEmpty {
+                answers[number] = keys
+            }
+        }
+        return answers
+    }
+
+    private static func normalizeAnswerKeys(_ value: String) -> Set<String> {
+        let uppercased = value.uppercased()
         var keys = Set<String>()
-        for char in answerText.uppercased() where ["A", "B", "C", "D"].contains(String(char)) {
+        for char in uppercased where ["A", "B", "C", "D", "E", "F"].contains(String(char)) {
             keys.insert(String(char))
+        }
+        if keys.isEmpty {
+            if value.contains("\u{6b63}") || value.contains("\u{5bf9}") || value.contains("\u{221a}") || value.contains("\u{2713}") {
+                keys.insert("A")
+            } else if value.contains("\u{8bef}") || value.contains("\u{9519}") || value.contains("\u{00d7}") || value.contains("\u{2717}") {
+                keys.insert("B")
+            }
         }
         return keys
     }
@@ -169,7 +215,7 @@ enum QuestionParser {
     }
 
     private static func optionMarkerMatches(in value: String) -> [(key: String, range: Range<String.Index>)] {
-        let pattern = "([A-D])\\s*[\\.\\x{ff0e}\\x{3001}:\\x{ff1a}]\\s*"
+        let pattern = "([A-F])\\s*[\\.\\x{ff0e}\\x{3001}:\\x{ff1a}]\\s*"
         guard let regex = try? NSRegularExpression(pattern: pattern) else { return [] }
         let nsRange = NSRange(value.startIndex..<value.endIndex, in: value)
         return regex.matches(in: value, range: nsRange).compactMap { result in

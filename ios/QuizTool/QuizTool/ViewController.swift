@@ -15,6 +15,9 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate, UIGestur
         case importText = 2
         case wrong = 3
         case profile = 4
+        case search = 5
+        case apiConfig = 6
+        case practiceMode = 7
         case practice = 9
     }
 
@@ -34,14 +37,21 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate, UIGestur
     private let tabStack = UIStackView()
     private var panStartOffset: CGPoint = .zero
     private var importTextView: UITextView?
+    private var searchResultsStack: UIStackView?
+    private var apiEndpointField: UITextField?
+    private var apiKeyField: UITextField?
     private var feedbackText: String?
     private var feedbackIsPositive = true
     private var autoNextEnabled = true
     private var shuffleOptionsEnabled = true
+    private var apiEndpoint = ""
+    private var apiKey = ""
+    private var searchQuery = ""
 
     private var papers: [Paper] = []
     private var activePaperIndex = 0
     private var wrongQuestions: [Question] = []
+    private var focusedPracticeQuestions: [Question]?
     private var order: [Int] = []
     private var optionOrders: [String: [String]] = [:]
     private var currentIndex = 0
@@ -55,12 +65,15 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate, UIGestur
     }
 
     private var activeQuestions: [Question] {
-        papers.isEmpty ? [] : activePaper.questions
+        focusedPracticeQuestions ?? (papers.isEmpty ? [] : activePaper.questions)
     }
 
     override func viewDidLoad() {
         super.viewDidLoad()
+        overrideUserInterfaceStyle = .light
         view.backgroundColor = appBackgroundColor
+        apiEndpoint = UserDefaults.standard.string(forKey: "apiEndpoint") ?? ""
+        apiKey = UserDefaults.standard.string(forKey: "apiKey") ?? ""
         configureSeedData()
         configureLayout()
         configureSwipeGestures()
@@ -111,7 +124,7 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate, UIGestur
         tabStack.distribution = .fillEqually
         tabStack.spacing = 0
         tabStack.backgroundColor = UIColor.white.withAlphaComponent(0.96)
-        tabStack.layoutMargins = UIEdgeInsets(top: 7, left: 10, bottom: 16, right: 10)
+        tabStack.layoutMargins = UIEdgeInsets(top: 12, left: 10, bottom: 20, right: 10)
         tabStack.isLayoutMarginsRelativeArrangement = true
 
         view.addSubview(scrollView)
@@ -129,7 +142,7 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate, UIGestur
             tabStack.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             tabStack.trailingAnchor.constraint(equalTo: view.trailingAnchor),
             tabStack.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor),
-            tabStack.heightAnchor.constraint(equalToConstant: 82)
+            tabStack.heightAnchor.constraint(equalToConstant: 94)
         ])
     }
 
@@ -155,6 +168,12 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate, UIGestur
                 self.renderWrong()
             case .profile:
                 self.renderProfile()
+            case .search:
+                self.renderSearch()
+            case .apiConfig:
+                self.renderAPIConfig()
+            case .practiceMode:
+                self.renderPracticeMode()
             case .practice:
                 self.renderPractice()
             }
@@ -185,7 +204,7 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate, UIGestur
     }
 
     private func renderHome() {
-        addTopBar(title: "\u{4e91}\u{9898} V10", chipTitle: "\u{5bfc}\u{5165}", action: #selector(openImportPage))
+        addTopBar(title: "\u{4e91}\u{9898} V11", chipTitle: "\u{5bfc}\u{5165}", action: #selector(openImportPage))
         addSearchField()
         addListGroup([
             paperRow(activePaper, index: activePaperIndex),
@@ -231,7 +250,7 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate, UIGestur
             return
         }
         let question = activeQuestions[order[currentIndex]]
-        addTopBar(title: activePaper.title, chipTitle: modeTitle, action: nil)
+        addTopBar(title: focusedPracticeQuestions == nil ? activePaper.title : "\u{9519}\u{9898}\u{7ec3}\u{4e60}", chipTitle: modeTitle, action: nil)
         addPracticeMeta()
         addProgress()
         if let feedbackText {
@@ -256,6 +275,9 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate, UIGestur
         if wrongQuestions.isEmpty {
             addEmptyState("\u{6682}\u{65e0}\u{9519}\u{9898}", "\u{53bb}\u{9898}\u{5e93}\u{5f00}\u{59cb}\u{4e00}\u{7ec4}\u{7ec3}\u{4e60}\u{5427}\u{3002}")
         } else {
+            let practice = makeButton("\u{5f00}\u{59cb}\u{9519}\u{9898}\u{7ec3}\u{4e60}", style: .primary)
+            practice.addTarget(self, action: #selector(startWrongPractice), for: .touchUpInside)
+            contentStack.addArrangedSubview(practice)
             for question in wrongQuestions {
                 addCard([makeText(question.prompt, size: 15, weight: .semibold), makeText(question.explanation, size: 13, weight: .regular, color: .secondaryLabel)])
             }
@@ -266,11 +288,56 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate, UIGestur
     }
 
     private func renderProfile() {
-        addTopBar(title: "\u{6211}\u{7684}", chipTitle: "V10", action: nil)
+        addTopBar(title: "\u{6211}\u{7684}", chipTitle: "V11", action: nil)
         contentStack.addArrangedSubview(iconSwitchRow(symbol: "\u{2192}", color: accentColor, title: "\u{7b54}\u{5bf9}\u{540e}\u{81ea}\u{52a8}\u{4e0b}\u{4e00}\u{9898}", subtitle: "\u{7b54}\u{5bf9}\u{76f4}\u{63a5}\u{5207}\u{9898}\u{ff0c}\u{7b54}\u{9519}\u{663e}\u{793a}\u{89e3}\u{6790}", isOn: autoNextEnabled, action: #selector(autoNextChanged(_:))))
         contentStack.addArrangedSubview(iconSwitchRow(symbol: "A", color: UIColor(red: 0.12, green: 0.47, blue: 0.90, alpha: 1), title: "\u{9009}\u{9879}\u{968f}\u{673a}\u{6392}\u{5e8f}", subtitle: "\u{8fd4}\u{56de}\u{540c}\u{9898}\u{65f6}\u{987a}\u{5e8f}\u{4fdd}\u{6301}\u{4e0d}\u{53d8}", isOn: shuffleOptionsEnabled, action: #selector(shuffleOptionsChanged(_:))))
-        contentStack.addArrangedSubview(iconInfoRow(symbol: "AI", color: UIColor(red: 0.06, green: 0.42, blue: 0.92, alpha: 1), title: "API \u{914d}\u{7f6e}", subtitle: "\u{7528}\u{4e8e}\u{6587}\u{6863}\u{8bc6}\u{522b}\u{548c}\u{89e3}\u{6790}\u{589e}\u{5f3a}"))
-        contentStack.addArrangedSubview(iconInfoRow(symbol: "\u{21bb}", color: UIColor(red: 0.97, green: 0.57, blue: 0.08, alpha: 1), title: "\u{7ec3}\u{4e60}\u{6a21}\u{5f0f}", subtitle: "\u{987a}\u{5e8f}\u{7ec3}\u{4e60} / \u{968f}\u{673a}\u{7ec3}\u{4e60}"))
+        contentStack.addArrangedSubview(iconInfoRow(symbol: "AI", color: UIColor(red: 0.06, green: 0.42, blue: 0.92, alpha: 1), title: "API \u{914d}\u{7f6e}", subtitle: apiEndpoint.isEmpty ? "\u{7528}\u{4e8e}\u{6587}\u{6863}\u{8bc6}\u{522b}\u{548c}\u{89e3}\u{6790}\u{589e}\u{5f3a}" : "\u{5df2}\u{914d}\u{7f6e}\u{63a5}\u{53e3}", action: #selector(openAPIConfig)))
+        contentStack.addArrangedSubview(iconInfoRow(symbol: "\u{21bb}", color: UIColor(red: 0.97, green: 0.57, blue: 0.08, alpha: 1), title: "\u{7ec3}\u{4e60}\u{6a21}\u{5f0f}", subtitle: "\u{987a}\u{5e8f}\u{7ec3}\u{4e60} / \u{968f}\u{673a}\u{7ec3}\u{4e60}", action: #selector(openPracticeMode)))
+    }
+
+    private func renderSearch() {
+        addTopBar(title: "\u{641c}\u{7d22}\u{8bd5}\u{5377}", chipTitle: "\u{8fd4}\u{56de}", action: #selector(backToLibrary))
+        let field = UITextField()
+        field.text = searchQuery
+        field.placeholder = "\u{8f93}\u{5165}\u{9898}\u{5e93}\u{540d}\u{6216}\u{6765}\u{6e90}"
+        field.font = UIFont.systemFont(ofSize: 16)
+        field.backgroundColor = cardBackgroundColor
+        field.layer.cornerRadius = 15
+        field.leftView = UIView(frame: CGRect(x: 0, y: 0, width: 14, height: 1))
+        field.leftViewMode = .always
+        field.heightAnchor.constraint(equalToConstant: 48).isActive = true
+        field.addTarget(self, action: #selector(searchChanged(_:)), for: .editingChanged)
+        contentStack.addArrangedSubview(field)
+
+        let results = UIStackView()
+        results.axis = .vertical
+        results.backgroundColor = cardBackgroundColor
+        results.layer.cornerRadius = 18
+        results.clipsToBounds = true
+        searchResultsStack = results
+        contentStack.addArrangedSubview(results)
+        refreshSearchResults()
+    }
+
+    private func renderAPIConfig() {
+        addTopBar(title: "API \u{914d}\u{7f6e}", chipTitle: "\u{8fd4}\u{56de}", action: #selector(backToProfile))
+        addEmptyState("\u{6587}\u{6863}\u{89e3}\u{6790}\u{589e}\u{5f3a}", "\u{586b}\u{5165}\u{63a5}\u{53e3}\u{548c} Key\u{ff0c}\u{540e}\u{7eed}\u{53ef}\u{7528}\u{4e8e} Word/PDF \u{590d}\u{6742}\u{7248}\u{5f0f}\u{8bc6}\u{522b}\u{3002}")
+        apiEndpointField = makeInput(placeholder: "API URL", text: apiEndpoint, secure: false)
+        apiKeyField = makeInput(placeholder: "API Key", text: apiKey, secure: true)
+        if let apiEndpointField { contentStack.addArrangedSubview(apiEndpointField) }
+        if let apiKeyField { contentStack.addArrangedSubview(apiKeyField) }
+        let save = makeButton("\u{4fdd}\u{5b58}\u{914d}\u{7f6e}", style: .primary)
+        save.addTarget(self, action: #selector(saveAPIConfig), for: .touchUpInside)
+        contentStack.addArrangedSubview(save)
+    }
+
+    private func renderPracticeMode() {
+        addTopBar(title: "\u{7ec3}\u{4e60}\u{6a21}\u{5f0f}", chipTitle: "\u{8fd4}\u{56de}", action: #selector(backToProfile))
+        addListGroup([
+            row("\u{987a}\u{5e8f}\u{7ec3}\u{4e60}", subtitle: "\u{6309}\u{9898}\u{5e93}\u{539f}\u{59cb}\u{987a}\u{5e8f}\u{5f00}\u{59cb}", action: #selector(selectSequentialMode)),
+            row("\u{968f}\u{673a}\u{7ec3}\u{4e60}", subtitle: "\u{6253}\u{4e71}\u{9898}\u{76ee}\u{987a}\u{5e8f}\u{ff0c}\u{9002}\u{5408}\u{590d}\u{4e60}", action: #selector(selectRandomMode)),
+            row("\u{9519}\u{9898}\u{7ec3}\u{4e60}", subtitle: wrongQuestions.isEmpty ? "\u{6682}\u{65e0}\u{9519}\u{9898}" : "\(wrongQuestions.count) \u{9898}\u{5f85}\u{5de9}\u{56fa}", action: #selector(startWrongPractice))
+        ])
     }
 
     private func addTitle(_ title: String, _ subtitle: String) {
@@ -403,6 +470,9 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate, UIGestur
         container.isLayoutMarginsRelativeArrangement = true
         container.backgroundColor = cardBackgroundColor
         container.layer.cornerRadius = 15
+        let tap = UITapGestureRecognizer(target: self, action: #selector(openSearchPage))
+        container.addGestureRecognizer(tap)
+        container.isUserInteractionEnabled = true
         contentStack.addArrangedSubview(container)
     }
 
@@ -458,7 +528,7 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate, UIGestur
         }
     }
 
-    private func iconInfoRow(symbol: String, color: UIColor, title: String, subtitle: String) -> UIView {
+    private func iconInfoRow(symbol: String, color: UIColor, title: String, subtitle: String, action: Selector? = nil) -> UIView {
         let icon = makeBadge(text: symbol, color: color)
         let titleLabel = makeText(title, size: 16, weight: .bold)
         let subtitleLabel = makeText(subtitle, size: 13, weight: .regular, color: .secondaryLabel)
@@ -477,6 +547,11 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate, UIGestur
         row.isLayoutMarginsRelativeArrangement = true
         row.backgroundColor = cardBackgroundColor.withAlphaComponent(0.82)
         row.layer.cornerRadius = 18
+        if let action {
+            let tap = UITapGestureRecognizer(target: self, action: action)
+            row.addGestureRecognizer(tap)
+            row.isUserInteractionEnabled = true
+        }
         return row
     }
 
@@ -531,7 +606,8 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate, UIGestur
 
     private func optionsForCurrentQuestion(_ question: Question) -> [Option] {
         let questionIndex = order.isEmpty ? currentIndex : order[currentIndex]
-        let cacheKey = "\(activePaperIndex)-\(questionIndex)"
+        let cachePrefix = focusedPracticeQuestions == nil ? "\(activePaperIndex)" : "wrong"
+        let cacheKey = "\(cachePrefix)-\(questionIndex)"
         if let keys = optionOrders[cacheKey] {
             return keys.compactMap { key in question.options.first { $0.key == key } }
         }
@@ -610,6 +686,22 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate, UIGestur
         return label
     }
 
+    private func makeInput(placeholder: String, text: String, secure: Bool) -> UITextField {
+        let field = UITextField()
+        field.text = text
+        field.placeholder = placeholder
+        field.font = UIFont.systemFont(ofSize: 16)
+        field.backgroundColor = cardBackgroundColor
+        field.layer.cornerRadius = 15
+        field.isSecureTextEntry = secure
+        field.autocorrectionType = .no
+        field.autocapitalizationType = .none
+        field.leftView = UIView(frame: CGRect(x: 0, y: 0, width: 14, height: 1))
+        field.leftViewMode = .always
+        field.heightAnchor.constraint(equalToConstant: 50).isActive = true
+        return field
+    }
+
     private func makeOptionButton(_ option: Option, displayKey: String, selected: Bool) -> UIButton {
         let button = UIButton(type: .system)
         button.accessibilityIdentifier = option.key
@@ -658,14 +750,24 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate, UIGestur
         let button = UIButton(type: .system)
         let color = selected ? accentColor : UIColor.label
         let image = UIImage(systemName: icon)?.withConfiguration(UIImage.SymbolConfiguration(pointSize: 19, weight: .regular))
-        button.setImage(image, for: .normal)
-        button.setTitle(title, for: .normal)
-        button.titleLabel?.font = UIFont.systemFont(ofSize: 11, weight: .semibold)
-        button.titleLabel?.textAlignment = .center
+        var configuration = UIButton.Configuration.plain()
+        configuration.image = image
+        configuration.title = title
+        configuration.imagePlacement = .top
+        configuration.imagePadding = 6
+        configuration.contentInsets = NSDirectionalEdgeInsets(top: 4, leading: 0, bottom: 4, trailing: 0)
+        configuration.baseForegroundColor = color
+        configuration.titleTextAttributesTransformer = UIConfigurationTextAttributesTransformer { incoming in
+            var outgoing = incoming
+            outgoing.font = UIFont.systemFont(ofSize: 11, weight: .semibold)
+            return outgoing
+        }
+        button.configuration = configuration
+        button.contentHorizontalAlignment = .center
+        button.contentVerticalAlignment = .center
         button.backgroundColor = UIColor.clear
         button.tintColor = color
         button.imageView?.contentMode = .scaleAspectFit
-        button.alignImageAboveTitle(spacing: 2)
         return button
     }
 
@@ -707,10 +809,36 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate, UIGestur
         }
     }
 
+    private func refreshSearchResults() {
+        guard let searchResultsStack else { return }
+        clearStack(searchResultsStack)
+        let trimmed = searchQuery.trimmingCharacters(in: .whitespacesAndNewlines)
+        let matched = papers.enumerated().filter { index, paper in
+            trimmed.isEmpty ||
+                paper.title.localizedCaseInsensitiveContains(trimmed) ||
+                paper.source.localizedCaseInsensitiveContains(trimmed) ||
+                (index == activePaperIndex && "\u{7ee7}\u{7eed}".contains(trimmed))
+        }
+        if matched.isEmpty {
+            let empty = row("\u{672a}\u{627e}\u{5230}\u{8bd5}\u{5377}", subtitle: "\u{6362}\u{4e2a}\u{5173}\u{952e}\u{8bcd}\u{8bd5}\u{8bd5}", action: nil)
+            searchResultsStack.addArrangedSubview(empty)
+            return
+        }
+        for item in matched {
+            searchResultsStack.addArrangedSubview(paperRow(item.element, index: item.offset))
+        }
+    }
+
     @objc private func tabTapped(_ sender: UIButton) {
         autoTimer?.invalidate()
         feedbackText = nil
+        focusedPracticeQuestions = nil
         page = Page(rawValue: sender.tag) ?? .home
+        render()
+    }
+
+    @objc private func openSearchPage() {
+        page = .search
         render()
     }
 
@@ -719,11 +847,59 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate, UIGestur
         render()
     }
 
+    @objc private func openAPIConfig() {
+        page = .apiConfig
+        render()
+    }
+
+    @objc private func openPracticeMode() {
+        page = .practiceMode
+        render()
+    }
+
+    @objc private func backToProfile() {
+        page = .profile
+        render()
+    }
+
+    @objc private func backToLibrary() {
+        page = .library
+        render()
+    }
+
+    @objc private func searchChanged(_ sender: UITextField) {
+        searchQuery = sender.text ?? ""
+        refreshSearchResults()
+    }
+
+    @objc private func saveAPIConfig() {
+        apiEndpoint = apiEndpointField?.text?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        apiKey = apiKeyField?.text?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        UserDefaults.standard.set(apiEndpoint, forKey: "apiEndpoint")
+        UserDefaults.standard.set(apiKey, forKey: "apiKey")
+        feedbackText = "\u{914d}\u{7f6e}\u{5df2}\u{4fdd}\u{5b58}"
+        feedbackIsPositive = true
+        page = .profile
+        render()
+    }
+
+    @objc private func selectSequentialMode() {
+        focusedPracticeQuestions = nil
+        startPaper(index: activePaperIndex, random: false)
+    }
+
+    @objc private func selectRandomMode() {
+        focusedPracticeQuestions = nil
+        startPaper(index: activePaperIndex, random: true)
+    }
+
     @objc private func openCurrentPaper() {
+        focusedPracticeQuestions = nil
         startPaper(index: activePaperIndex, random: false)
     }
 
     @objc private func openRandomPractice() {
+        focusedPracticeQuestions = nil
         startPaper(index: activePaperIndex, random: true)
     }
 
@@ -735,10 +911,28 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate, UIGestur
     private func startPaper(index: Int, random: Bool) {
         guard papers.indices.contains(index) else { return }
         activePaperIndex = index
+        focusedPracticeQuestions = nil
         let questions = activeQuestions
         order = random ? Array(questions.indices).shuffled() : Array(questions.indices)
         optionOrders.removeAll()
         modeTitle = random ? "\u{968f}\u{673a}\u{7ec3}\u{4e60}" : "\u{987a}\u{5e8f}\u{7ec3}\u{4e60}"
+        currentIndex = 0
+        selectedAnswers.removeAll()
+        feedbackText = nil
+        page = .practice
+        render()
+    }
+
+    @objc private func startWrongPractice() {
+        guard !wrongQuestions.isEmpty else {
+            page = .wrong
+            render()
+            return
+        }
+        focusedPracticeQuestions = wrongQuestions
+        order = Array(wrongQuestions.indices)
+        optionOrders.removeAll()
+        modeTitle = "\u{9519}\u{9898}\u{7ec3}\u{4e60}"
         currentIndex = 0
         selectedAnswers.removeAll()
         feedbackText = nil
@@ -770,7 +964,9 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate, UIGestur
                 render()
             }
         } else {
-            wrongQuestions.append(question)
+            if !wrongQuestions.contains(where: { $0.prompt == question.prompt }) {
+                wrongQuestions.append(question)
+            }
             feedbackText = "\u{7b54}\u{9519}\u{4e86}\u{ff1a}\(question.explanation)"
             feedbackIsPositive = false
             render()
