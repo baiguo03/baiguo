@@ -25,7 +25,10 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate {
         case danger
     }
 
-    private let accentColor = UIColor(red: 0.13, green: 0.68, blue: 0.35, alpha: 1)
+    private let accentColor = UIColor(red: 0.09, green: 0.71, blue: 0.42, alpha: 1)
+    private let appBackgroundColor = UIColor(red: 0.96, green: 0.96, blue: 0.97, alpha: 1)
+    private let softGreenColor = UIColor(red: 0.93, green: 0.98, blue: 0.95, alpha: 1)
+    private let cardBackgroundColor = UIColor.white
     private let scrollView = UIScrollView()
     private let contentStack = UIStackView()
     private let tabStack = UIStackView()
@@ -56,7 +59,7 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate {
 
     override func viewDidLoad() {
         super.viewDidLoad()
-        view.backgroundColor = UIColor.systemGroupedBackground
+        view.backgroundColor = appBackgroundColor
         configureSeedData()
         configureLayout()
         configureSwipeGestures()
@@ -101,13 +104,13 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate {
         contentStack.translatesAutoresizingMaskIntoConstraints = false
         tabStack.translatesAutoresizingMaskIntoConstraints = false
         contentStack.axis = .vertical
-        contentStack.spacing = 12
+        contentStack.spacing = 10
         contentStack.alignment = .fill
         tabStack.axis = .horizontal
         tabStack.distribution = .fillEqually
-        tabStack.spacing = 4
-        tabStack.backgroundColor = UIColor.secondarySystemGroupedBackground
-        tabStack.layoutMargins = UIEdgeInsets(top: 8, left: 8, bottom: 8, right: 8)
+        tabStack.spacing = 0
+        tabStack.backgroundColor = UIColor.white.withAlphaComponent(0.96)
+        tabStack.layoutMargins = UIEdgeInsets(top: 8, left: 10, bottom: 18, right: 10)
         tabStack.isLayoutMarginsRelativeArrangement = true
 
         view.addSubview(scrollView)
@@ -118,14 +121,14 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate {
             scrollView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             scrollView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
             scrollView.bottomAnchor.constraint(equalTo: tabStack.topAnchor),
-            contentStack.topAnchor.constraint(equalTo: scrollView.contentLayoutGuide.topAnchor, constant: 16),
-            contentStack.leadingAnchor.constraint(equalTo: scrollView.frameLayoutGuide.leadingAnchor, constant: 16),
-            contentStack.trailingAnchor.constraint(equalTo: scrollView.frameLayoutGuide.trailingAnchor, constant: -16),
-            contentStack.bottomAnchor.constraint(equalTo: scrollView.contentLayoutGuide.bottomAnchor, constant: -18),
+            contentStack.topAnchor.constraint(equalTo: scrollView.contentLayoutGuide.topAnchor, constant: 14),
+            contentStack.leadingAnchor.constraint(equalTo: scrollView.frameLayoutGuide.leadingAnchor, constant: 20),
+            contentStack.trailingAnchor.constraint(equalTo: scrollView.frameLayoutGuide.trailingAnchor, constant: -20),
+            contentStack.bottomAnchor.constraint(equalTo: scrollView.contentLayoutGuide.bottomAnchor, constant: -16),
             tabStack.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             tabStack.trailingAnchor.constraint(equalTo: view.trailingAnchor),
             tabStack.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor),
-            tabStack.heightAnchor.constraint(equalToConstant: 78)
+            tabStack.heightAnchor.constraint(equalToConstant: 86)
         ])
     }
 
@@ -169,10 +172,10 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate {
     private func renderTabs() {
         clearStack(tabStack)
         let items: [(Page, String, String)] = [
-            (.home, "\u{25cf}", "\u{9996}\u{9875}"),
-            (.library, "\u{25c7}", "\u{9898}\u{5e93}"),
-            (.wrong, "\u{25ce}", "\u{9519}\u{9898}"),
-            (.profile, "\u{25bd}", "\u{6211}\u{7684}")
+            (.home, "house", "\u{9996}\u{9875}"),
+            (.library, "square.grid.2x2", "\u{9898}\u{5e93}"),
+            (.wrong, "exclamationmark.triangle", "\u{9519}\u{9898}"),
+            (.profile, "person", "\u{6211}\u{7684}")
         ]
         for item in items {
             let selected = item.0 == page || (page == .practice && item.0 == .library)
@@ -283,10 +286,10 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate {
     private func addTitle(_ title: String, _ subtitle: String) {
         let titleLabel = UILabel()
         titleLabel.text = title
-        titleLabel.font = UIFont.systemFont(ofSize: 32, weight: .bold)
+        titleLabel.font = UIFont.systemFont(ofSize: 27, weight: .bold)
         titleLabel.numberOfLines = 0
         contentStack.addArrangedSubview(titleLabel)
-        let subtitleLabel = makeText(subtitle, size: 15, weight: .regular, color: .secondaryLabel)
+        let subtitleLabel = makeText(subtitle, size: 15, weight: .regular, color: UIColor.secondaryLabel)
         contentStack.addArrangedSubview(subtitleLabel)
     }
 
@@ -317,8 +320,8 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate {
         stack.alignment = .center
         stack.layoutMargins = UIEdgeInsets(top: 14, left: 10, bottom: 14, right: 10)
         stack.isLayoutMarginsRelativeArrangement = true
-        stack.backgroundColor = UIColor.white
-        stack.layer.cornerRadius = 14
+        stack.backgroundColor = cardBackgroundColor
+        stack.layer.cornerRadius = 18
         return stack
     }
 
@@ -351,8 +354,8 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate {
     private func addListGroup(_ rows: [UIView]) {
         let stack = UIStackView()
         stack.axis = .vertical
-        stack.backgroundColor = UIColor.white
-        stack.layer.cornerRadius = 14
+        stack.backgroundColor = cardBackgroundColor
+        stack.layer.cornerRadius = 22
         stack.clipsToBounds = true
         for index in rows.indices {
             stack.addArrangedSubview(rows[index])
@@ -367,8 +370,8 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate {
     }
 
     private func addQuestionCard(_ question: Question) {
-        let chip = makeText(question.kind, size: 13, weight: .semibold, color: accentColor)
-        let prompt = makeText(question.prompt, size: 20, weight: .bold)
+        let chip = makeText(question.kind, size: 14, weight: .bold, color: accentColor)
+        let prompt = makeText(question.prompt, size: 23, weight: .bold)
         addCard([chip, prompt])
     }
 
@@ -401,10 +404,10 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate {
         let label = makeText(text, size: 15, weight: .semibold, color: positive ? accentColor : .systemRed)
         label.textAlignment = .center
         let stack = UIStackView(arrangedSubviews: [label])
-        stack.layoutMargins = UIEdgeInsets(top: 12, left: 12, bottom: 12, right: 12)
+        stack.layoutMargins = UIEdgeInsets(top: 12, left: 14, bottom: 12, right: 14)
         stack.isLayoutMarginsRelativeArrangement = true
-        stack.backgroundColor = positive ? accentColor.withAlphaComponent(0.12) : UIColor.systemRed.withAlphaComponent(0.12)
-        stack.layer.cornerRadius = 12
+        stack.backgroundColor = positive ? softGreenColor : UIColor.systemRed.withAlphaComponent(0.12)
+        stack.layer.cornerRadius = 16
         contentStack.addArrangedSubview(stack)
     }
 
@@ -416,10 +419,10 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate {
         let stack = UIStackView(arrangedSubviews: views)
         stack.axis = .vertical
         stack.spacing = 10
-        stack.layoutMargins = UIEdgeInsets(top: 16, left: 16, bottom: 16, right: 16)
+        stack.layoutMargins = UIEdgeInsets(top: 18, left: 18, bottom: 18, right: 18)
         stack.isLayoutMarginsRelativeArrangement = true
-        stack.backgroundColor = UIColor.white
-        stack.layer.cornerRadius = 14
+        stack.backgroundColor = cardBackgroundColor
+        stack.layer.cornerRadius = 22
         contentStack.addArrangedSubview(stack)
     }
 
@@ -439,8 +442,8 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate {
         row.spacing = 12
         row.layoutMargins = UIEdgeInsets(top: 14, left: 14, bottom: 14, right: 14)
         row.isLayoutMarginsRelativeArrangement = true
-        row.backgroundColor = UIColor.white
-        row.layer.cornerRadius = 14
+        row.backgroundColor = cardBackgroundColor
+        row.layer.cornerRadius = 18
         contentStack.addArrangedSubview(row)
     }
 
@@ -458,31 +461,26 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate {
         let button = makeButton(title, style: .plain)
         button.contentHorizontalAlignment = .left
         button.accessibilityIdentifier = option.key
-        button.backgroundColor = selected ? UIColor.tertiarySystemFill : UIColor.white
-        button.tintColor = UIColor.label
+        button.backgroundColor = selected ? softGreenColor : cardBackgroundColor
+        button.tintColor = selected ? accentColor : UIColor.label
         button.layer.borderWidth = selected ? 1 : 0.5
-        button.layer.borderColor = selected ? accentColor.cgColor : UIColor.separator.cgColor
+        button.layer.borderColor = selected ? accentColor.withAlphaComponent(0.32).cgColor : UIColor.separator.cgColor
+        button.layer.cornerRadius = 17
         return button
     }
 
     private func makeTabButton(icon: String, title: String, selected: Bool) -> UIButton {
         let button = UIButton(type: .system)
         let color = selected ? accentColor : UIColor.label
-        let text = "\(icon)\n\(title)"
-        let attributed = NSMutableAttributedString(
-            string: text,
-            attributes: [
-                .font: UIFont.systemFont(ofSize: 11, weight: .regular),
-                .foregroundColor: color,
-                .paragraphStyle: centeredParagraphStyle()
-            ]
-        )
-        attributed.addAttributes([.font: UIFont.systemFont(ofSize: 24, weight: .regular)], range: NSRange(location: 0, length: icon.count))
-        button.setAttributedTitle(attributed, for: .normal)
-        button.titleLabel?.numberOfLines = 2
+        let image = UIImage(systemName: icon)?.withConfiguration(UIImage.SymbolConfiguration(pointSize: 22, weight: .regular))
+        button.setImage(image, for: .normal)
+        button.setTitle(title, for: .normal)
+        button.titleLabel?.font = UIFont.systemFont(ofSize: 12, weight: .semibold)
         button.titleLabel?.textAlignment = .center
         button.backgroundColor = UIColor.clear
         button.tintColor = color
+        button.imageView?.contentMode = .scaleAspectFit
+        button.alignImageAboveTitle(spacing: 3)
         return button
     }
 
@@ -609,15 +607,7 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate {
     }
 
     private func renderSlideToNext() {
-        clearStack(contentStack)
-        renderTabs()
-        renderPractice()
-        contentStack.transform = CGAffineTransform(translationX: 0, y: 2)
-        contentStack.alpha = 0.82
-        UIView.animate(withDuration: 0.28, delay: 0, options: [.curveEaseInOut, .allowUserInteraction]) {
-            self.contentStack.transform = .identity
-            self.contentStack.alpha = 1
-        }
+        renderCalmQuestionChange()
     }
 
     private func renderCalmQuestionChange() {
@@ -745,5 +735,30 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate {
         selectedAnswers.removeAll()
         feedbackText = nil
         render()
+    }
+}
+
+private extension UIButton {
+    func alignImageAboveTitle(spacing: CGFloat) {
+        guard
+            let imageSize = imageView?.image?.size,
+            let text = titleLabel?.text,
+            let font = titleLabel?.font
+        else { return }
+
+        let titleSize = (text as NSString).size(withAttributes: [.font: font])
+        titleEdgeInsets = UIEdgeInsets(
+            top: imageSize.height + spacing,
+            left: -imageSize.width,
+            bottom: 0,
+            right: 0
+        )
+        imageEdgeInsets = UIEdgeInsets(
+            top: 0,
+            left: 0,
+            bottom: titleSize.height + spacing,
+            right: -titleSize.width
+        )
+        contentEdgeInsets = UIEdgeInsets(top: 4, left: 0, bottom: 4, right: 0)
     }
 }
