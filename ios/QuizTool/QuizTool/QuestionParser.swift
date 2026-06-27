@@ -112,10 +112,20 @@ enum QuestionParser {
         if let regex = try? NSRegularExpression(pattern: pattern) {
             prepared = regex.stringByReplacingMatches(in: prepared, range: range, withTemplate: "\n$2")
         }
-        let stuckPattern = "([A-Fa-f])(?=(\\d{1,3}[\\.\\x{3001}\\x{ff0e}]\\s*)[^\\n]{0,180}\\s*A\\s*[\\.\\x{ff0e}\\x{3001}:\\x{ff1a}])"
-        if let regex = try? NSRegularExpression(pattern: stuckPattern) {
+        let stuckQuestionPattern = "([^\\s\\d])(?=(\\d{1,3}[\\.\\x{3001}\\x{ff0e}]\\s*)[^\\n]{0,180}\\s*A\\s*[\\.\\x{ff0e}\\x{3001}:\\x{ff1a}])"
+        if let regex = try? NSRegularExpression(pattern: stuckQuestionPattern) {
             let stuckRange = NSRange(prepared.startIndex..<prepared.endIndex, in: prepared)
             prepared = regex.stringByReplacingMatches(in: prepared, range: stuckRange, withTemplate: "$1\n")
+        }
+        let inlineJudgementPattern = "([^\\s\\d])(?=(\\d{1,3}[\\.\\x{3001}\\x{ff0e}]\\s*)[^\\n]{0,120}[\\x{ff08}\\(]\\s*[\\x{ff09}\\)])"
+        if let regex = try? NSRegularExpression(pattern: inlineJudgementPattern) {
+            let judgementRange = NSRange(prepared.startIndex..<prepared.endIndex, in: prepared)
+            prepared = regex.stringByReplacingMatches(in: prepared, range: judgementRange, withTemplate: "$1\n")
+        }
+        let spacedJudgementPattern = "(\\s+)(\\d{1,3}[\\.\\x{3001}\\x{ff0e}]\\s*)(?=[^\\n]{0,120}[\\x{ff08}\\(]\\s*[\\x{ff09}\\)])"
+        if let regex = try? NSRegularExpression(pattern: spacedJudgementPattern) {
+            let judgementRange = NSRange(prepared.startIndex..<prepared.endIndex, in: prepared)
+            prepared = regex.stringByReplacingMatches(in: prepared, range: judgementRange, withTemplate: "\n$2")
         }
         let openPattern = "(\\s+)(\\d{1,3}[\\.\\x{3001}\\x{ff0e}]\\s*)(?=[^\\n]{0,120}(\u{586b}\u{7a7a}|\u{7b80}\u{7b54}|\u{914d}\u{4f0d}|____|\u{7b54}\u{6848}[\\x{ff1a}:]))"
         if let regex = try? NSRegularExpression(pattern: openPattern) {
@@ -238,9 +248,10 @@ enum QuestionParser {
 
         if optionMatches.isEmpty {
             let prompt = cleanPrompt(body)
-            let isTrueFalse = isTrueFalseQuestion(prompt, answer: resolvedBlockAnswer)
+            let candidateAnswer = answer.isEmpty ? (fallbackAnswer ?? []) : answer
+            let isTrueFalse = isTrueFalseQuestion(prompt, answer: candidateAnswer)
             let inlineAnswer = extractFreeformAnswer(from: compact)
-            let openAnswer = resolvedBlockAnswer.isEmpty ? (inlineAnswer.isEmpty ? (fallbackFreeformAnswer ?? "") : inlineAnswer) : resolvedBlockAnswer.sorted().joined(separator: "、")
+            let openAnswer = inlineAnswer.isEmpty ? (fallbackFreeformAnswer ?? "") : inlineAnswer
             if !isTrueFalse {
                 return Question(
                     prompt: prompt,
@@ -258,7 +269,7 @@ enum QuestionParser {
                     Option(key: "A", text: "\u{6b63}\u{786e}"),
                     Option(key: "B", text: "\u{9519}\u{8bef}")
                 ],
-                answer: resolvedBlockAnswer.isEmpty ? Set(["A"]) : resolvedBlockAnswer,
+                answer: candidateAnswer.isEmpty ? Set(["A"]) : candidateAnswer,
                 explanation: explanation,
                 kind: "\u{5224}\u{65ad}\u{9898}"
             )
@@ -469,7 +480,11 @@ enum QuestionParser {
             return prompt.contains("\u{6b63}\u{786e}") ||
                 prompt.contains("\u{9519}\u{8bef}") ||
                 prompt.contains("\u{5224}\u{65ad}") ||
-                prompt.contains("\u{662f}\u{5426}")
+                prompt.contains("\u{662f}\u{5426}") ||
+                prompt.contains("\u{ff08}\u{ff09}") ||
+                prompt.contains("\u{ff08} \u{ff09}") ||
+                prompt.contains("( )") ||
+                prompt.contains("()")
         }
         return false
     }

@@ -211,6 +211,16 @@ def split_question_blocks(text: str) -> list[str]:
         text,
     )
     text = re.sub(
+        r"([^\s\d])(?=(\d{1,3}[\.\u3001\uff0e]\s*)[^\n]{0,120}[\uff08\(]\s*[\uff09\)])",
+        r"\1\n",
+        text,
+    )
+    text = re.sub(
+        r"(\s+)(\d{1,3}[\.\u3001\uff0e]\s*)(?=[^\n]{0,120}[\uff08\(]\s*[\uff09\)])",
+        r"\n\2",
+        text,
+    )
+    text = re.sub(
         r"(\s+)(\d{1,3}[\.\u3001\uff0e]\s*)(?=[^\n]{0,120}(\u586b\u7a7a|\u7b80\u7b54|\u914d\u4f0d|____|\u7b54\u6848[:\uff1a]))",
         r"\n\2",
         text,
@@ -336,6 +346,27 @@ stuck_question_sample = (
 stuck_blocks = split_question_blocks(stuck_question_sample)
 if len(stuck_blocks) != 2:
     raise SystemExit(f"stuck answer/question boundary should split into 2 questions, got {stuck_blocks!r}")
+
+stuck_option_boundary_sample = (
+    "20. \u7c7b\u767d\u8840\u75c5\u53cd\u5e94\u60a3\u8005 NAP \u79ef\u5206\u901a\u5e38\uff08\uff09 "
+    "A. \u663e\u8457\u5347\u9ad8 B. \u6b63\u5e38 C. \u964d\u4f4e D. \u96f6\u5206 "
+    "21. \u9aa8\u9ad3\u589e\u751f\u6781\u5ea6\u6d3b\u8dc3\uff0c\u4ee5\u4e2d\u5e7c\u7c92\u4ee5\u4e0b\u9636\u6bb5\u7ec6\u80de\u4e3a\u4e3b\uff0c\u8f83\u6613\u89c1\u55dc\u9178\u3001\u55dc\u78b1\u6027\u7c92\u7ec6\u80de\uff08\uff09 "
+    "A. \u6162\u6027\u7c92\u7ec6\u80de\u767d\u8840\u75c5 B. MDS C. \u6025\u6027\u7c92\u7ec6\u80de\u767d\u8840\u75c5 D. \u7c7b\u767d\u8840\u75c5\u53cd\u5e94"
+)
+stuck_option_blocks = split_question_blocks(stuck_option_boundary_sample)
+if len(stuck_option_blocks) != 2:
+    raise SystemExit(f"next numeric question should not be swallowed into options, got {stuck_option_blocks!r}")
+if option_keys(stuck_option_blocks[0]) != ["A", "B", "C", "D"] or option_keys(stuck_option_blocks[1]) != ["A", "B", "C", "D"]:
+    raise SystemExit(f"stuck numeric boundary produced bad option keys: {stuck_option_blocks!r}")
+
+inline_judgement_sample = (
+    "1. \u8840\u6e05\u603b\u94c1\u7ed3\u5408\u529b\u5728\u7f3a\u94c1\u6027\u8d2b\u8840\u65f6\u5347\u9ad8\u3002\uff08\uff09 "
+    "2. \u6b63\u5e38\u9aa8\u9ad3\u7c92\u7ea2\u6bd4\u503c\u53c2\u8003\u8303\u56f4\u4e3a (2~4):1\u3002\uff08\uff09 "
+    "3. \u5c3f\u672c\u5468\u86cb\u767d\u4ec5\u5728\u52a0\u70ed\u81f3 100\u00b0C \u65f6\u51dd\u56fa\u3002\uff08\uff09"
+)
+inline_judgement_blocks = split_question_blocks(inline_judgement_sample)
+if len(inline_judgement_blocks) != 3:
+    raise SystemExit(f"inline judgement questions should split into 3, got {inline_judgement_blocks!r}")
 
 freeform_answers = extract_freeform_summary_answers(mixed_section_sample)
 if not freeform_answers or "Auer" not in freeform_answers[0]:

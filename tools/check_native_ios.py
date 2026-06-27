@@ -20,6 +20,7 @@ plist = read("ios/QuizTool/QuizTool/Info.plist")
 yaml = read("codemagic.yaml")
 
 for old in [
+    "QuizNativeV11",
     "QuizNativeV10",
     "QuizNativeV9",
     "QuizNativeV8",
@@ -29,10 +30,12 @@ for old in [
     "QuizNativeV4",
     "QuizNativeV3",
     "QuizNativeV2",
+    "云题 V11",
+    "&#x4e91;&#x9898;V11",
 ]:
     require(old not in view + parser + project + plist + yaml, f"old marker remains: {old}")
 
-require("PRODUCT_NAME = QuizNativeV11;" in project, "missing QuizNativeV11 product")
+require("PRODUCT_NAME = Lizi;" in project, "missing Lizi product")
 require("ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;" in project, "missing AppIcon setting")
 require("QuestionParser.swift in Sources" in project, "parser is not in sources")
 require("insertBreaksBeforeInlineQuestionStarts" in parser, "parser does not split inline question starts")
@@ -43,18 +46,21 @@ require("freeformAnswers[freeformIndex]" in parser and "extractFreeformSummaryAn
 require("normalizeAnswerKeys" in parser, "parser does not normalize summary answers")
 require("isSectionHeading" in parser and "\\u{5355}\\u{9879}\\u{9009}\\u{62e9}\\u{9898}" in parser, "parser does not skip paper section headings")
 require("isCaseQuestionStart" in parser, "case-analysis questions are not kept as whole blocks")
-require("stuckPattern" in parser, "parser does not split stuck answer/question boundaries")
+require("stuckQuestionPattern" in parser, "parser does not split stuck answer/question boundaries")
+require("inlineJudgementPattern" in parser, "parser does not split inline judgement questions")
+require("candidateAnswer" in parser and "openAnswer" in parser, "open questions still use objective summary answers")
 require("inferOpenQuestionKind" in parser and "\\u{586b}\\u{7a7a}\\u{9898}" in parser, "fill-in questions are not supported")
 require("\\u{7b80}\\u{7b54}\\u{9898}" in parser and "\\u{914d}\\u{4f0d}\\u{9898}" in parser, "short answer/matching questions are not supported")
-require("QuizNativeV11.ipa" in yaml, "Codemagic artifact is not V11")
-require("&#x4e91;&#x9898;V11" in plist, "display name is not Yunti V11")
+require("Lizi.ipa" in yaml, "Codemagic artifact is not Lizi")
+require("<string>李子</string>" in plist, "display name is not Lizi")
 require("UIUserInterfaceStyle" in plist and "<string>Light</string>" in plist, "app does not force light appearance")
 require("overrideUserInterfaceStyle = .light" in view, "view controller does not force light appearance")
 require("autoNextEnabled" in view and "UISwitch" in view, "auto-next switch not wired")
 require("shuffleOptionsEnabled" in view and "optionOrders" in view, "option shuffle setting/order cache missing")
 require("Codable" in view and "AppState" in view, "app state persistence model is missing")
 require("loadPersistedState" in view and "savePersistedState" in view, "app state persistence is not wired")
-require("UserDefaults.standard.data(forKey: storageKey)" in view, "persisted app state is not loaded")
+require("legacyStorageKey" in view and '"Yunti" + "V11AppState"' in view, "old saved app state is not migrated")
+require("defaults.data(forKey: storageKey)" in view and "persistedData" in view, "persisted app state is not loaded")
 require("UserDefaults.standard.set(data, forKey: storageKey)" in view, "persisted app state is not saved")
 require("case search" in view and "renderSearch" in view and "openSearchPage" in view, "search entry is not wired")
 require("case apiConfig" in view and "renderAPIConfig" in view and "openAPIConfig" in view, "api config entry is not wired")
@@ -69,6 +75,8 @@ require("tabStack.heightAnchor.constraint(equalToConstant: 94)" in view, "native
 require("UIEdgeInsets(top: 12, left: 10, bottom: 20, right: 10)" in view, "native tab bar vertical padding is too tight")
 require("UIImage(systemName:" in view, "native bottom tabs still use text glyphs")
 require("addTopBar" in view and "makeChip" in view, "browser-style top bar/chip is missing")
+require('addTopBar(title: "李子"' in view, "home title is not Lizi")
+require('addTopBar(title: "\\u{6211}\\u{7684}", chipTitle: nil' in view, "profile still shows V11 badge")
 require("button.layer.cornerRadius = 17" in view, "native option rows do not match V11 preview")
 require("stack.layer.cornerRadius = 18" in view, "native cards/lists are still too bulky")
 require("addSearchField" in view and "\\u{641c}\\u{7d22}\\u{8bd5}\\u{5377}" in view, "library search field is missing")
@@ -83,6 +91,9 @@ require("translation.x * 0.03" in view, "drag feedback is still too strong")
 require("makeTabButton" in view and "imagePlacement = .top" in view and "imagePadding = 6" in view, "wechat-like bottom tab spacing missing")
 require("if autoNextEnabled" in view and "submitAnswer()" in view, "auto-next does not submit on option tap")
 require("if !autoNextEnabled" in view, "submit button still shows in auto-next mode")
+require("openQuestionJumpSheet" in view and "keyboardType = .numberPad" in view and "jumpToQuestion" in view, "quick question jump is missing")
+require("revealAnswer" in view and "isCorrectOption" in view and "isWrongSelectedOption" in view, "wrong answer state does not reveal correct option")
+require("addAnswerComparison" in view, "open/fill questions do not show answer comparison")
 require("openRandomPractice" in view and "random: true" in view, "home random practice shortcut is missing")
 require("letterLabel" in view and "UIColor.tertiarySystemFill" in view, "selected option does not use iOS settings-like highlight")
 require("setContentCompressionResistancePriority(.defaultLow, for: .horizontal)" in view, "right-side row controls can drift left")
@@ -94,7 +105,8 @@ require("import PDFKit" in view, "PDFKit import missing")
 require("import UniformTypeIdentifiers" in view, "UTType import missing")
 require("import PhotosUI" in view and "PHPickerViewController" in view, "image import picker missing")
 require("import Vision" in view and "VNRecognizeTextRequest" in view and "recognitionLanguages" in view, "local image OCR is missing")
-require("UISwipeGestureRecognizer" in view and "confirmDeletePaper" in view and "deletePaper" in view, "left-swipe paper deletion is missing")
+require("paperDeletePanned" in view and "translation.x < -44" in view and "confirmDeletePaper" in view and "deletePaper" in view, "left-drag paper deletion is missing")
+require("page == .home" in view and "setPage(.library, animated: false)" in view, "home pinned paper cannot switch library")
 require((ROOT / "ios/QuizTool/QuizTool/Assets.xcassets/AppIcon.appiconset/Icon-60-60@3x.png").exists(), "missing 180px app icon")
 require((ROOT / "ios/QuizTool/QuizTool/Assets.xcassets/AppIcon.appiconset/Icon-1024.png").exists(), "missing 1024px app icon")
 

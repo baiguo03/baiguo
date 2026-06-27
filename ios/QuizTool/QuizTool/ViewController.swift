@@ -49,7 +49,8 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate, PHPicker
     private let scrollView = UIScrollView()
     private let contentStack = UIStackView()
     private let tabStack = UIStackView()
-    private let storageKey = "YuntiV11AppState"
+    private let storageKey = "LiziAppState"
+    private let legacyStorageKey = "Yunti" + "V11AppState"
     private var panStartOffset: CGPoint = .zero
     private var importTextView: UITextView?
     private var searchResultsStack: UIStackView?
@@ -128,8 +129,10 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate, PHPicker
     }
 
     private func loadPersistedState() {
+        let defaults = UserDefaults.standard
+        let persistedData = defaults.data(forKey: storageKey) ?? defaults.data(forKey: legacyStorageKey)
         guard
-            let data = UserDefaults.standard.data(forKey: storageKey),
+            let data = persistedData,
             let state = try? JSONDecoder().decode(AppState.self, from: data),
             !state.papers.isEmpty
         else { return }
@@ -145,6 +148,9 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate, PHPicker
         let maxIndex = max(activeQuestions.count - 1, 0)
         currentIndex = min(currentIndex, maxIndex)
         order = activeQuestions.isEmpty ? [] : Array(activeQuestions.indices)
+        if defaults.data(forKey: storageKey) == nil {
+            savePersistedState()
+        }
     }
 
     private func savePersistedState() {
@@ -259,7 +265,7 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate, PHPicker
     }
 
     private func renderHome() {
-        addTopBar(title: "\u{4e91}\u{9898} V11", chipTitle: "\u{5bfc}\u{5165}", action: #selector(openImportPage))
+        addTopBar(title: "李子", chipTitle: "\u{5bfc}\u{5165}", action: #selector(openImportPage))
         addSearchField()
         addListGroup([
             paperRow(activePaper, index: activePaperIndex),
@@ -306,18 +312,24 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate, PHPicker
             return
         }
         let question = activeQuestions[order[currentIndex]]
-        addTopBar(title: focusedPracticeQuestions == nil ? activePaper.title : "\u{9519}\u{9898}\u{7ec3}\u{4e60}", chipTitle: modeTitle, action: nil)
+        addTopBar(title: focusedPracticeQuestions == nil ? activePaper.title : "\u{9519}\u{9898}\u{7ec3}\u{4e60}", chipTitle: "\(modeTitle) · \u{8df3}\u{9898}", action: #selector(openQuestionJumpSheet))
         addPracticeMeta()
         addProgress()
         if let feedbackText {
             addFeedback(feedbackText, positive: feedbackIsPositive)
         }
         addQuestionCard(question)
+        let revealAnswer = feedbackText != nil && !feedbackIsPositive
         for (index, option) in optionsForCurrentQuestion(question).enumerated() {
             let selected = selectedAnswers.contains(option.key)
-            let button = makeOptionButton(option, displayKey: displayKey(for: index), selected: selected)
+            let isCorrectOption = revealAnswer && question.answer.contains(option.key)
+            let isWrongSelectedOption = revealAnswer && selected && !question.answer.contains(option.key)
+            let button = makeOptionButton(option, displayKey: displayKey(for: index), selected: selected, correct: isCorrectOption, wrong: isWrongSelectedOption)
             button.addTarget(self, action: #selector(answerTapped(_:)), for: .touchUpInside)
             contentStack.addArrangedSubview(button)
+        }
+        if revealAnswer {
+            addAnswerComparison(question)
         }
         if !autoNextEnabled {
             let submit = makeButton("\u{63d0}\u{4ea4}\u{7b54}\u{6848}", style: .primary)
@@ -344,7 +356,7 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate, PHPicker
     }
 
     private func renderProfile() {
-        addTopBar(title: "\u{6211}\u{7684}", chipTitle: "V11", action: nil)
+        addTopBar(title: "\u{6211}\u{7684}", chipTitle: nil, action: nil)
         contentStack.addArrangedSubview(iconSwitchRow(symbol: "\u{2192}", color: accentColor, title: "\u{7b54}\u{5bf9}\u{540e}\u{81ea}\u{52a8}\u{4e0b}\u{4e00}\u{9898}", subtitle: "\u{7b54}\u{5bf9}\u{76f4}\u{63a5}\u{5207}\u{9898}\u{ff0c}\u{7b54}\u{9519}\u{663e}\u{793a}\u{89e3}\u{6790}", isOn: autoNextEnabled, action: #selector(autoNextChanged(_:))))
         contentStack.addArrangedSubview(iconSwitchRow(symbol: "A", color: UIColor(red: 0.12, green: 0.47, blue: 0.90, alpha: 1), title: "\u{9009}\u{9879}\u{968f}\u{673a}\u{6392}\u{5e8f}", subtitle: "\u{8fd4}\u{56de}\u{540c}\u{9898}\u{65f6}\u{987a}\u{5e8f}\u{4fdd}\u{6301}\u{4e0d}\u{53d8}", isOn: shuffleOptionsEnabled, action: #selector(shuffleOptionsChanged(_:))))
         contentStack.addArrangedSubview(iconInfoRow(symbol: "AI", color: UIColor(red: 0.06, green: 0.42, blue: 0.92, alpha: 1), title: "API \u{914d}\u{7f6e}", subtitle: apiEndpoint.isEmpty ? "\u{7528}\u{4e8e}\u{6587}\u{6863}\u{8bc6}\u{522b}\u{548c}\u{89e3}\u{6790}\u{589e}\u{5f3a}" : "\u{5df2}\u{914d}\u{7f6e}\u{63a5}\u{53e3}", action: #selector(openAPIConfig)))
@@ -562,6 +574,9 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate, PHPicker
         let deleteSwipe = UISwipeGestureRecognizer(target: self, action: #selector(paperDeleteSwiped(_:)))
         deleteSwipe.direction = .left
         row.addGestureRecognizer(deleteSwipe)
+        let deletePan = UIPanGestureRecognizer(target: self, action: #selector(paperDeletePanned(_:)))
+        deletePan.cancelsTouchesInView = false
+        row.addGestureRecognizer(deletePan)
         row.isUserInteractionEnabled = true
         return row
     }
@@ -666,6 +681,18 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate, PHPicker
         addCard([chip, prompt])
     }
 
+    private func addAnswerComparison(_ question: Question) {
+        let correctOptions = question.options
+            .filter { question.answer.contains($0.key) }
+            .map { "\($0.key). \($0.text)" }
+        let answerText = correctOptions.isEmpty ? question.explanation : correctOptions.joined(separator: "\n")
+        let title = makeText("\u{6b63}\u{786e}\u{7b54}\u{6848}", size: 13, weight: .bold, color: accentColor)
+        let answer = makeText(answerText, size: 15, weight: .semibold)
+        let explanation = makeText(question.explanation, size: 13, weight: .regular, color: .secondaryLabel)
+        let views = question.explanation == "\u{6682}\u{65e0}\u{89e3}\u{6790}" ? [title, answer] : [title, answer, explanation]
+        addCard(views)
+    }
+
     private func optionsForCurrentQuestion(_ question: Question) -> [Option] {
         let questionIndex = order.isEmpty ? currentIndex : order[currentIndex]
         let cachePrefix = focusedPracticeQuestions == nil ? "\(activePaperIndex)" : "wrong"
@@ -764,13 +791,14 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate, PHPicker
         return field
     }
 
-    private func makeOptionButton(_ option: Option, displayKey: String, selected: Bool) -> UIButton {
+    private func makeOptionButton(_ option: Option, displayKey: String, selected: Bool, correct: Bool = false, wrong: Bool = false) -> UIButton {
         let button = UIButton(type: .system)
         button.accessibilityIdentifier = option.key
-        button.backgroundColor = selected ? softGreenColor : cardBackgroundColor
+        let active = selected || correct || wrong
+        button.backgroundColor = correct ? softGreenColor : (wrong ? UIColor.systemRed.withAlphaComponent(0.10) : (selected ? softGreenColor : cardBackgroundColor))
         button.tintColor = UIColor.label
-        button.layer.borderWidth = selected ? 1 : 0.5
-        button.layer.borderColor = selected ? accentColor.withAlphaComponent(0.32).cgColor : UIColor.separator.cgColor
+        button.layer.borderWidth = active ? 1 : 0.5
+        button.layer.borderColor = correct ? accentColor.withAlphaComponent(0.50).cgColor : (wrong ? UIColor.systemRed.withAlphaComponent(0.42).cgColor : (selected ? accentColor.withAlphaComponent(0.32).cgColor : UIColor.separator.cgColor))
         button.layer.cornerRadius = 17
         button.contentHorizontalAlignment = .fill
         button.contentVerticalAlignment = .fill
@@ -779,8 +807,8 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate, PHPicker
         letterLabel.text = displayKey
         letterLabel.font = UIFont.systemFont(ofSize: 13, weight: .bold)
         letterLabel.textAlignment = .center
-        letterLabel.textColor = selected ? UIColor.white : UIColor.label
-        letterLabel.backgroundColor = selected ? accentColor : UIColor.tertiarySystemFill
+        letterLabel.textColor = active ? UIColor.white : UIColor.label
+        letterLabel.backgroundColor = correct ? accentColor : (wrong ? UIColor.systemRed : (selected ? accentColor : UIColor.tertiarySystemFill))
         letterLabel.layer.cornerRadius = 13
         letterLabel.clipsToBounds = true
         letterLabel.translatesAutoresizingMaskIntoConstraints = false
@@ -788,7 +816,7 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate, PHPicker
         let textLabel = UILabel()
         textLabel.text = option.text
         textLabel.font = UIFont.systemFont(ofSize: 16, weight: .semibold)
-        textLabel.textColor = selected ? accentColor : UIColor.label
+        textLabel.textColor = correct ? accentColor : (wrong ? UIColor.systemRed : (selected ? accentColor : UIColor.label))
         textLabel.numberOfLines = 0
         textLabel.translatesAutoresizingMaskIntoConstraints = false
 
@@ -960,12 +988,36 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate, PHPicker
 
     @objc private func paperTapped(_ sender: UITapGestureRecognizer) {
         guard let index = sender.view?.tag else { return }
+        if page == .home {
+            setPage(.library, animated: false)
+            return
+        }
         startPaper(index: index, random: false)
     }
 
     @objc private func paperDeleteSwiped(_ sender: UISwipeGestureRecognizer) {
         guard let index = sender.view?.tag, papers.indices.contains(index) else { return }
         confirmDeletePaper(at: index)
+    }
+
+    @objc private func paperDeletePanned(_ sender: UIPanGestureRecognizer) {
+        guard let row = sender.view, let index = sender.view?.tag, papers.indices.contains(index) else { return }
+        let translation = sender.translation(in: row)
+        switch sender.state {
+        case .changed:
+            if translation.x < 0, abs(translation.x) > abs(translation.y) {
+                row.transform = CGAffineTransform(translationX: max(translation.x * 0.18, -18), y: 0)
+            }
+        case .ended:
+            row.transform = .identity
+            if translation.x < -44, abs(translation.x) > abs(translation.y) * 1.3 {
+                confirmDeletePaper(at: index)
+            }
+        case .cancelled, .failed:
+            row.transform = .identity
+        default:
+            break
+        }
     }
 
     private func confirmDeletePaper(at index: Int) {
@@ -1033,6 +1085,39 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate, PHPicker
         selectedAnswers.removeAll()
         feedbackText = nil
         setPage(.practice, animated: false)
+    }
+
+    @objc private func openQuestionJumpSheet() {
+        guard page == .practice, !order.isEmpty else { return }
+        let alert = UIAlertController(
+            title: "\u{8df3}\u{5230}\u{9898}\u{76ee}",
+            message: "\u{8f93}\u{5165} 1-\(order.count) \u{4e4b}\u{95f4}\u{7684}\u{9898}\u{53f7}",
+            preferredStyle: .alert
+        )
+        alert.addTextField { field in
+            field.placeholder = "\(self.currentIndex + 1)"
+            field.keyboardType = .numberPad
+        }
+        alert.addAction(UIAlertAction(title: "\u{53d6}\u{6d88}", style: .cancel))
+        alert.addAction(UIAlertAction(title: "\u{8df3}\u{8f6c}", style: .default) { [weak self, weak alert] _ in
+            guard
+                let self,
+                let value = alert?.textFields?.first?.text,
+                let number = Int(value.trimmingCharacters(in: .whitespacesAndNewlines))
+            else { return }
+            self.jumpToQuestion(number - 1)
+        })
+        present(alert, animated: true)
+    }
+
+    private func jumpToQuestion(_ index: Int) {
+        guard !order.isEmpty else { return }
+        currentIndex = min(max(index, 0), order.count - 1)
+        selectedAnswers.removeAll()
+        feedbackText = nil
+        savePersistedState()
+        page = .practice
+        renderCalmQuestionChange()
     }
 
     @objc private func answerTapped(_ sender: UIButton) {
