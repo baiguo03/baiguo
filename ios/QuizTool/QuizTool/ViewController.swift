@@ -1,8 +1,10 @@
 import UIKit
 import PDFKit
+import PhotosUI
 import UniformTypeIdentifiers
+import Vision
 
-final class ViewController: UIViewController, UIDocumentPickerDelegate, UIGestureRecognizerDelegate {
+final class ViewController: UIViewController, UIDocumentPickerDelegate, PHPickerViewControllerDelegate, UIGestureRecognizerDelegate {
     private struct Paper: Codable {
         let title: String
         let source: String
@@ -281,6 +283,7 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate, UIGestur
         addTitle("\u{5bfc}\u{5165}", "\u{6587}\u{4ef6}\u{5bfc}\u{5165}\u{4f18}\u{5148}\u{652f}\u{6301} TXT/PDF\u{ff0c}Word \u{540e}\u{7eed}\u{63a5} API \u{89e3}\u{6790}\u{66f4}\u{7a33}\u{3002}")
         addListGroup([
             row("\u{6587}\u{4ef6}\u{5bfc}\u{5165}", subtitle: "TXT / PDF", action: #selector(openFileImporter)),
+            row("\u{56fe}\u{7247}\u{8bc6}\u{522b}\u{5bfc}\u{5165}", subtitle: "\u{622a}\u{56fe} / \u{7167}\u{7247} OCR", action: #selector(openImageImporter)),
             row("\u{7c98}\u{8d34}\u{5bfc}\u{5165}", subtitle: "\u{5c06}\u{9898}\u{76ee}\u{6587}\u{672c}\u{7c98}\u{8d34}\u{5230}\u{4e0b}\u{65b9}", action: nil)
         ])
         let textView = UITextView()
@@ -530,7 +533,8 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate, UIGestur
     }
 
     private func paperRow(_ paper: Paper, index: Int) -> UIView {
-        let badgeText = paper.source.uppercased().contains("PDF") ? "PDF" : (paper.source.uppercased().contains("TXT") ? "TXT" : "DOC")
+        let source = paper.source.uppercased()
+        let badgeText = source.contains("PDF") ? "PDF" : (source.contains("TXT") ? "TXT" : (source.contains("IMG") || source.contains("OCR") ? "IMG" : "DOC"))
         let badge = makeBadge(text: badgeText, color: badgeColor(for: badgeText))
         let titleLabel = makeText(paper.title, size: 16, weight: .bold)
         let mode = index == activePaperIndex ? modeTitle : "\u{987a}\u{5e8f}\u{7ec3}\u{4e60}"
@@ -555,6 +559,9 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate, UIGestur
         row.tag = index
         let tap = UITapGestureRecognizer(target: self, action: #selector(paperTapped(_:)))
         row.addGestureRecognizer(tap)
+        let deleteSwipe = UISwipeGestureRecognizer(target: self, action: #selector(paperDeleteSwiped(_:)))
+        deleteSwipe.direction = .left
+        row.addGestureRecognizer(deleteSwipe)
         row.isUserInteractionEnabled = true
         return row
     }
@@ -576,6 +583,8 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate, UIGestur
             return UIColor(red: 0.09, green: 0.74, blue: 0.43, alpha: 1)
         case "DOC":
             return UIColor(red: 0.05, green: 0.55, blue: 0.92, alpha: 1)
+        case "IMG":
+            return UIColor(red: 0.58, green: 0.34, blue: 0.92, alpha: 1)
         default:
             return UIColor(red: 0.98, green: 0.62, blue: 0.08, alpha: 1)
         }
@@ -954,6 +963,48 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate, UIGestur
         startPaper(index: index, random: false)
     }
 
+    @objc private func paperDeleteSwiped(_ sender: UISwipeGestureRecognizer) {
+        guard let index = sender.view?.tag, papers.indices.contains(index) else { return }
+        confirmDeletePaper(at: index)
+    }
+
+    private func confirmDeletePaper(at index: Int) {
+        let paper = papers[index]
+        let alert = UIAlertController(
+            title: "\u{5220}\u{9664}\u{9898}\u{5e93}",
+            message: "\u{786e}\u{5b9a}\u{5220}\u{9664}\u{300c}\(paper.title)\u{300d}\u{5417}\u{ff1f}\u{8fd9}\u{4e2a}\u{64cd}\u{4f5c}\u{4f1a}\u{4ece}\u{672c}\u{673a}\u{4fdd}\u{5b58}\u{4e2d}\u{79fb}\u{9664}\u{3002}",
+            preferredStyle: .actionSheet
+        )
+        alert.addAction(UIAlertAction(title: "\u{53d6}\u{6d88}", style: .cancel))
+        alert.addAction(UIAlertAction(title: "\u{5220}\u{9664}\u{9898}\u{5e93}", style: .destructive) { [weak self] _ in
+            self?.deletePaper(at: index)
+        })
+        present(alert, animated: true)
+    }
+
+    private func deletePaper(at index: Int) {
+        guard papers.indices.contains(index), papers.count > 1 else {
+            feedbackText = "\u{81f3}\u{5c11}\u{9700}\u{4fdd}\u{7559}\u{4e00}\u{4efd}\u{9898}\u{5e93}"
+            feedbackIsPositive = false
+            render()
+            return
+        }
+        papers.remove(at: index)
+        if activePaperIndex >= papers.count {
+            activePaperIndex = papers.count - 1
+        } else if index < activePaperIndex {
+            activePaperIndex -= 1
+        }
+        currentIndex = 0
+        order = Array(activeQuestions.indices)
+        optionOrders.removeAll()
+        selectedAnswers.removeAll()
+        feedbackText = "\u{9898}\u{5e93}\u{5df2}\u{5220}\u{9664}"
+        feedbackIsPositive = true
+        savePersistedState()
+        render()
+    }
+
     private func startPaper(index: Int, random: Bool) {
         guard papers.indices.contains(index) else { return }
         activePaperIndex = index
@@ -1139,6 +1190,54 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate, UIGestur
         picker.delegate = self
         picker.allowsMultipleSelection = false
         present(picker, animated: true)
+    }
+
+    @objc private func openImageImporter() {
+        var configuration = PHPickerConfiguration(photoLibrary: .shared())
+        configuration.filter = .images
+        configuration.selectionLimit = 1
+        let picker = PHPickerViewController(configuration: configuration)
+        picker.delegate = self
+        present(picker, animated: true)
+    }
+
+    func picker(_ picker: PHPickerViewController, didFinishPicking results: [PHPickerResult]) {
+        picker.dismiss(animated: true)
+        guard let provider = results.first?.itemProvider else { return }
+        if provider.canLoadObject(ofClass: UIImage.self) {
+            provider.loadObject(ofClass: UIImage.self) { [weak self] object, _ in
+                guard let self, let image = object as? UIImage else { return }
+                self.recognizeText(from: image) { text in
+                    DispatchQueue.main.async {
+                        self.importQuestions(from: text, title: "\u{56fe}\u{7247}\u{8bc6}\u{522b}\u{9898}\u{5e93}", source: "IMG OCR")
+                    }
+                }
+            }
+        }
+    }
+
+    private func recognizeText(from image: UIImage, completion: @escaping (String) -> Void) {
+        guard let cgImage = image.cgImage else {
+            completion("")
+            return
+        }
+        let request = VNRecognizeTextRequest { request, _ in
+            let text = (request.results as? [VNRecognizedTextObservation])?
+                .compactMap { $0.topCandidates(1).first?.string }
+                .joined(separator: "\n") ?? ""
+            completion(text)
+        }
+        request.recognitionLevel = .accurate
+        request.recognitionLanguages = ["zh-Hans", "en-US"]
+        request.usesLanguageCorrection = true
+        DispatchQueue.global(qos: .userInitiated).async {
+            let handler = VNImageRequestHandler(cgImage: cgImage, options: [:])
+            do {
+                try handler.perform([request])
+            } catch {
+                completion("")
+            }
+        }
     }
 
     func documentPicker(_ controller: UIDocumentPickerViewController, didPickDocumentsAt urls: [URL]) {
