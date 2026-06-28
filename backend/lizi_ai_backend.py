@@ -124,8 +124,9 @@ def ai_prompt(mode, title, source, text):
 {text[:50000]}"""
 
 
-def call_ai(mode, title, source, text):
-    if not AI_KEY:
+def call_ai(mode, title, source, text, request_key=None):
+    key = AI_KEY or (request_key or "").strip()
+    if not key:
         return None
     payload = {
         "model": AI_MODEL,
@@ -140,7 +141,7 @@ def call_ai(mode, title, source, text):
         data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
         headers={
             "Content-Type": "application/json",
-            "Authorization": f"Bearer {AI_KEY}",
+            "Authorization": f"Bearer {key}",
         },
         method="POST",
     )
@@ -173,10 +174,13 @@ class Handler(BaseHTTPRequestHandler):
             title = payload.get("title", "题库")
             source = payload.get("source", "local")
             mode = payload.get("mode") or ("validate" if self.path.endswith("validate-questions") else "parse")
+            request_key = self.headers.get("Authorization", "").strip()
+            if request_key.lower().startswith("bearer "):
+                request_key = request_key[7:].strip()
             if not text:
                 send_json(self, 400, {"error": "missing text", "questions": []})
                 return
-            result = call_ai(mode, title, source, text)
+            result = call_ai(mode, title, source, text, request_key=request_key)
             if not result:
                 result = {"questions": local_parse(text), "localFallback": True}
             send_json(self, 200, result)

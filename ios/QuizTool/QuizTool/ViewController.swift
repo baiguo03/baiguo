@@ -199,7 +199,7 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate, PHPicker
         showRandomPractice = state.showRandomPractice ?? true
         showWrongPracticeEntry = state.showWrongPracticeEntry ?? true
         showEditEntry = state.showEditEntry ?? true
-        apiEndpoint = state.apiEndpoint
+        apiEndpoint = normalizeAPIEndpoint(state.apiEndpoint)
         apiKey = state.apiKey
         answeredSelections = (state.answeredSelections ?? [:]).mapValues { Set($0) }
         textAnswers = state.textAnswers ?? [:]
@@ -241,6 +241,10 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate, PHPicker
         contentStack.axis = .vertical
         contentStack.spacing = 8
         contentStack.alignment = .fill
+        scrollView.alwaysBounceVertical = true
+        scrollView.keyboardDismissMode = .interactive
+        scrollView.delaysContentTouches = false
+        scrollView.canCancelContentTouches = true
         tabStack.axis = .horizontal
         tabStack.distribution = .fillEqually
         tabStack.spacing = 0
@@ -271,6 +275,7 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate, PHPicker
         let pan = UIPanGestureRecognizer(target: self, action: #selector(handlePracticePan(_:)))
         pan.delegate = self
         pan.cancelsTouchesInView = false
+        pan.maximumNumberOfTouches = 1
         scrollView.addGestureRecognizer(pan)
     }
 
@@ -498,10 +503,7 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate, PHPicker
         addTopBar(title: "\u{6211}\u{7684}", chipTitle: nil, action: nil)
         contentStack.addArrangedSubview(iconSwitchRow(symbol: "\u{2192}", color: accentColor, title: "\u{7b54}\u{5bf9}\u{540e}\u{81ea}\u{52a8}\u{4e0b}\u{4e00}\u{9898}", subtitle: "\u{7b54}\u{5bf9}\u{76f4}\u{63a5}\u{5207}\u{9898}\u{ff0c}\u{7b54}\u{9519}\u{663e}\u{793a}\u{89e3}\u{6790}", isOn: autoNextEnabled, action: #selector(autoNextChanged(_:))))
         contentStack.addArrangedSubview(iconSwitchRow(symbol: "A", color: UIColor(red: 0.12, green: 0.47, blue: 0.90, alpha: 1), title: "\u{9009}\u{9879}\u{968f}\u{673a}\u{6392}\u{5e8f}", subtitle: "\u{8fd4}\u{56de}\u{540c}\u{9898}\u{65f6}\u{987a}\u{5e8f}\u{4fdd}\u{6301}\u{4e0d}\u{53d8}", isOn: shuffleOptionsEnabled, action: #selector(shuffleOptionsChanged(_:))))
-        contentStack.addArrangedSubview(iconSwitchRow(symbol: "1", color: UIColor(red: 0.15, green: 0.55, blue: 0.94, alpha: 1), title: "\u{663e}\u{793a}\u{987a}\u{5e8f}\u{7ec3}\u{4e60}", subtitle: "\u{9898}\u{5e93}\u{8be6}\u{60c5}\u{91cc}\u{663e}\u{793a}\u{7ee7}\u{7eed} / \u{987a}\u{5e8f}\u{5165}\u{53e3}", isOn: showSequentialPractice, action: #selector(showSequentialChanged(_:))))
-        contentStack.addArrangedSubview(iconSwitchRow(symbol: "\u{21c4}", color: UIColor(red: 0.97, green: 0.57, blue: 0.08, alpha: 1), title: "\u{663e}\u{793a}\u{968f}\u{673a}\u{7ec3}\u{4e60}", subtitle: "\u{9898}\u{5e93}\u{8be6}\u{60c5}\u{91cc}\u{663e}\u{793a}\u{968f}\u{673a}\u{7ec3}\u{4e60}\u{5165}\u{53e3}", isOn: showRandomPractice, action: #selector(showRandomChanged(_:))))
-        contentStack.addArrangedSubview(iconSwitchRow(symbol: "!", color: UIColor.systemRed, title: "\u{663e}\u{793a}\u{9519}\u{9898}\u{7ec3}\u{4e60}", subtitle: "\u{9898}\u{5e93}\u{8be6}\u{60c5}\u{91cc}\u{663e}\u{793a}\u{9519}\u{9898}\u{7ec3}\u{4e60}\u{5165}\u{53e3}", isOn: showWrongPracticeEntry, action: #selector(showWrongEntryChanged(_:))))
-        contentStack.addArrangedSubview(iconSwitchRow(symbol: "\u{270e}", color: UIColor.systemPurple, title: "\u{663e}\u{793a}\u{9898}\u{76ee}\u{7f16}\u{8f91}", subtitle: "\u{9898}\u{5e93}\u{8be6}\u{60c5}\u{91cc}\u{663e}\u{793a}\u{9898}\u{76ee}\u{7f16}\u{8f91}\u{5165}\u{53e3}", isOn: showEditEntry, action: #selector(showEditEntryChanged(_:))))
+        contentStack.addArrangedSubview(iconInfoRow(symbol: "\u{21c4}", color: UIColor(red: 0.97, green: 0.57, blue: 0.08, alpha: 1), title: "\u{7ec3}\u{4e60}\u{6a21}\u{5f0f}", subtitle: "\u{7ba1}\u{7406}\u{987a}\u{5e8f}\u{3001}\u{968f}\u{673a}\u{3001}\u{9519}\u{9898}\u{548c}\u{7f16}\u{8f91}\u{5165}\u{53e3}", action: #selector(openPracticeMode)))
         contentStack.addArrangedSubview(iconInfoRow(symbol: "AI", color: UIColor(red: 0.06, green: 0.42, blue: 0.92, alpha: 1), title: "API \u{914d}\u{7f6e}", subtitle: apiEndpoint.isEmpty ? "\u{7528}\u{4e8e}\u{6587}\u{6863}\u{8bc6}\u{522b}\u{548c}\u{89e3}\u{6790}\u{589e}\u{5f3a}" : "\u{5df2}\u{914d}\u{7f6e}\u{63a5}\u{53e3}", action: #selector(openAPIConfig)))
     }
 
@@ -543,11 +545,11 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate, PHPicker
 
     private func renderPracticeMode() {
         addTopBar(title: "\u{7ec3}\u{4e60}\u{6a21}\u{5f0f}", chipTitle: "\u{8fd4}\u{56de}", action: #selector(backToProfile))
-        addListGroup([
-            row("\u{987a}\u{5e8f}\u{7ec3}\u{4e60}", subtitle: "\u{6309}\u{9898}\u{5e93}\u{539f}\u{59cb}\u{987a}\u{5e8f}\u{5f00}\u{59cb}", action: #selector(selectSequentialMode)),
-            row("\u{968f}\u{673a}\u{7ec3}\u{4e60}", subtitle: "\u{6253}\u{4e71}\u{9898}\u{76ee}\u{987a}\u{5e8f}\u{ff0c}\u{9002}\u{5408}\u{590d}\u{4e60}", action: #selector(selectRandomMode)),
-            row("\u{9519}\u{9898}\u{7ec3}\u{4e60}", subtitle: wrongQuestions.isEmpty ? "\u{6682}\u{65e0}\u{9519}\u{9898}" : "\(wrongQuestions.count) \u{9898}\u{5f85}\u{5de9}\u{56fa}", action: #selector(startWrongPractice))
-        ])
+        addEmptyState("\u{9898}\u{5e93}\u{8be6}\u{60c5}\u{5165}\u{53e3}", "\u{8fd9}\u{91cc}\u{53ea}\u{63a7}\u{5236}\u{9898}\u{5e93}\u{8be6}\u{60c5}\u{9875}\u{663e}\u{793a}\u{54ea}\u{4e9b}\u{7ec3}\u{4e60}\u{548c}\u{7f16}\u{8f91}\u{529f}\u{80fd}\u{ff0c}\u{4e0d}\u{518d}\u{6324}\u{5728}\u{6211}\u{7684}\u{9875}\u{91cc}\u{3002}")
+        contentStack.addArrangedSubview(iconSwitchRow(symbol: "1", color: UIColor(red: 0.15, green: 0.55, blue: 0.94, alpha: 1), title: "\u{987a}\u{5e8f}\u{7ec3}\u{4e60}\u{5165}\u{53e3}", subtitle: "\u{9898}\u{5e93}\u{8be6}\u{60c5}\u{91cc}\u{663e}\u{793a}\u{7ee7}\u{7eed} / \u{987a}\u{5e8f}\u{7ec3}\u{4e60}", isOn: showSequentialPractice, action: #selector(showSequentialChanged(_:))))
+        contentStack.addArrangedSubview(iconSwitchRow(symbol: "\u{21c4}", color: UIColor(red: 0.97, green: 0.57, blue: 0.08, alpha: 1), title: "\u{968f}\u{673a}\u{7ec3}\u{4e60}\u{5165}\u{53e3}", subtitle: "\u{9898}\u{5e93}\u{8be6}\u{60c5}\u{91cc}\u{663e}\u{793a}\u{968f}\u{673a}\u{7ec3}\u{4e60}", isOn: showRandomPractice, action: #selector(showRandomChanged(_:))))
+        contentStack.addArrangedSubview(iconSwitchRow(symbol: "!", color: UIColor.systemRed, title: "\u{9519}\u{9898}\u{7ec3}\u{4e60}\u{5165}\u{53e3}", subtitle: "\u{9898}\u{5e93}\u{8be6}\u{60c5}\u{91cc}\u{663e}\u{793a}\u{9519}\u{9898}\u{7ec3}\u{4e60}", isOn: showWrongPracticeEntry, action: #selector(showWrongEntryChanged(_:))))
+        contentStack.addArrangedSubview(iconSwitchRow(symbol: "\u{270e}", color: UIColor.systemPurple, title: "\u{9898}\u{76ee}\u{7f16}\u{8f91}\u{5165}\u{53e3}", subtitle: "\u{9898}\u{5e93}\u{8be6}\u{60c5}\u{91cc}\u{663e}\u{793a}\u{9898}\u{76ee}\u{7f16}\u{8f91}", isOn: showEditEntry, action: #selector(showEditEntryChanged(_:))))
     }
 
     private func renderQuestionList() {
@@ -1502,7 +1504,7 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate, PHPicker
     }
 
     @objc private func saveAPIConfig() {
-        apiEndpoint = apiEndpointField?.text?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        apiEndpoint = normalizeAPIEndpoint(apiEndpointField?.text ?? "")
         apiKey = apiKeyField?.text?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         UserDefaults.standard.set(apiEndpoint, forKey: "apiEndpoint")
         UserDefaults.standard.set(apiKey, forKey: "apiKey")
@@ -1510,6 +1512,27 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate, PHPicker
         feedbackText = "\u{914d}\u{7f6e}\u{5df2}\u{4fdd}\u{5b58}"
         feedbackIsPositive = true
         setPage(.profile, animated: false)
+    }
+
+    private func normalizeAPIEndpoint(_ raw: String) -> String {
+        var text = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        text = text.replacingOccurrences(of: "：", with: ":")
+        text = text.replacingOccurrences(of: "ip:", with: ":")
+        text = text.replacingOccurrences(of: "IP:", with: ":")
+        text = text.replacingOccurrences(of: " ", with: "")
+        guard !text.isEmpty else { return "" }
+        if !text.lowercased().hasPrefix("http://") && !text.lowercased().hasPrefix("https://") {
+            text = "http://\(text)"
+        }
+        guard let url = URL(string: text), let host = url.host, !host.isEmpty else {
+            return text
+        }
+        if url.path == "" || url.path == "/" {
+            var components = URLComponents(url: url, resolvingAgainstBaseURL: false)
+            components?.path = "/api/parse-questions"
+            return components?.url?.absoluteString ?? text
+        }
+        return text
     }
 
     @objc private func selectSequentialMode() {
@@ -1961,6 +1984,10 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate, PHPicker
         guard page == .practice, let pan = gestureRecognizer as? UIPanGestureRecognizer else { return true }
         let velocity = pan.velocity(in: view)
         return abs(velocity.x) > abs(velocity.y) * 1.2
+    }
+
+    func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer) -> Bool {
+        gestureRecognizer.view === scrollView || otherGestureRecognizer.view === scrollView
     }
 
     @objc private func handlePracticePan(_ gesture: UIPanGestureRecognizer) {

@@ -67,12 +67,15 @@ require("case apiConfig" in view and "renderAPIConfig" in view and "openAPIConfi
 require("AIParseRequest" in view and "AIParseResponse" in view and "AIQuestionPayload" in view, "AI parse API models are missing")
 require("aiImportTapped" in view and "requestAIParse" in view and "decodeAIQuestions" in view, "AI-assisted import flow is missing")
 require("URLSession.shared.dataTask" in view and '"Authorization"' in view and '"Bearer \\(apiKey)"' in view, "AI parse request does not call configured backend securely")
+require("normalizeAPIEndpoint" in view and 'replacingOccurrences(of: "ip:"' in view and 'replacingOccurrences(of: "："' in view, "API URL typo normalization is missing")
 require("QuestionParser.parse(response.text" in view and "normalizedAnswerKeys" in view, "AI parse response fallback/normalization is missing")
 require("case practiceMode" in view and "renderPracticeMode" in view and "openPracticeMode" in view, "practice mode entry is not wired")
 require("startWrongPractice" in view and "focusedPracticeQuestions" in view, "wrong question practice is missing")
 require('"wrong"' in view and "cachePrefix" in view, "wrong practice option cache is not isolated")
 require("wrongQuestions.contains" in view, "wrong questions can be duplicated")
 require("UIPanGestureRecognizer" in view and "translation.x > 36" in view and "velocity.x > 420" in view, "sensitive horizontal swipe gestures missing")
+require("alwaysBounceVertical" in view and "keyboardDismissMode = .interactive" in view, "scroll view is not tuned for long jump/edit pages")
+require("shouldRecognizeSimultaneouslyWith" in view, "custom swipe gesture can still block vertical scrolling")
 require("appBackgroundColor" in view and "softGreenColor" in view, "V11 palette is not in native UI")
 require("UIFont.systemFont(ofSize: 24" in view, "native title size is still too heavy")
 require("tabStack.heightAnchor.constraint(equalToConstant: 82)" in view, "native tab bar height is not balanced")
@@ -116,6 +119,11 @@ home_body = view.split("private func renderHome()", 1)[1].split("private func re
 require("openCurrentPaper" not in home_body and "openRandomPractice" not in home_body, "home still exposes direct practice shortcuts")
 detail_body = view.split("private func renderPaperDetail()", 1)[1].split("private func renderImport()", 1)[0]
 require("showSequentialPractice" in detail_body and "showRandomPractice" in detail_body and "showWrongPracticeEntry" in detail_body and "showEditEntry" in detail_body, "paper detail does not respect practice entry switches")
+profile_body = view.split("private func renderProfile()", 1)[1].split("private func renderSearch()", 1)[0]
+practice_mode_body = view.split("private func renderPracticeMode()", 1)[1].split("private func renderQuestionList()", 1)[0]
+for key in ["showSequentialPractice", "showRandomPractice", "showWrongPracticeEntry", "showEditEntry"]:
+    require(key not in profile_body, f"{key} switch is still cluttering profile")
+    require(key in practice_mode_body, f"{key} switch was not moved into practice mode")
 require("letterLabel" in view and "UIColor.tertiarySystemFill" in view, "selected option does not use iOS settings-like highlight")
 require("setContentCompressionResistancePriority(.defaultLow, for: .horizontal)" in view, "right-side row controls can drift left")
 require("QuestionParser.parse" in view, "import does not use parser")
