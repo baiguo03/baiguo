@@ -25,6 +25,25 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate, PHPicker
         let textAnswers: [String: String]?
     }
 
+    private struct AIParseRequest: Codable {
+        let text: String
+        let title: String
+        let source: String
+    }
+
+    private struct AIParseResponse: Codable {
+        let questions: [AIQuestionPayload]?
+        let text: String?
+    }
+
+    private struct AIQuestionPayload: Codable {
+        let prompt: String
+        let options: [Option]?
+        let answer: [String]?
+        let explanation: String?
+        let kind: String?
+    }
+
     private enum Page: Int {
         case home = 0
         case library = 1
@@ -316,6 +335,9 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate, PHPicker
 
     private func renderImport() {
         addTitle("\u{5bfc}\u{5165}", "\u{6587}\u{4ef6}\u{5bfc}\u{5165}\u{4f18}\u{5148}\u{652f}\u{6301} TXT/PDF\u{ff0c}Word \u{540e}\u{7eed}\u{63a5} API \u{89e3}\u{6790}\u{66f4}\u{7a33}\u{3002}")
+        if let feedbackText {
+            addFeedback(feedbackText, positive: feedbackIsPositive)
+        }
         addListGroup([
             row("\u{6587}\u{4ef6}\u{5bfc}\u{5165}", subtitle: "TXT / PDF", action: #selector(openFileImporter)),
             row("\u{56fe}\u{7247}\u{8bc6}\u{522b}\u{5bfc}\u{5165}", subtitle: "\u{622a}\u{56fe} / \u{7167}\u{7247} OCR", action: #selector(openImageImporter)),
@@ -333,6 +355,9 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate, PHPicker
         let parse = makeButton("\u{89e3}\u{6790}\u{4e3a}\u{65b0}\u{9898}\u{5e93}", style: .primary)
         parse.addTarget(self, action: #selector(importTapped), for: .touchUpInside)
         contentStack.addArrangedSubview(parse)
+        let aiParse = makeButton("AI \u{8f85}\u{52a9}\u{89e3}\u{6790}\u{5bfc}\u{5165}", style: .secondary)
+        aiParse.addTarget(self, action: #selector(aiImportTapped), for: .touchUpInside)
+        contentStack.addArrangedSubview(aiParse)
     }
 
     private func renderPractice() {
@@ -1763,14 +1788,27 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate, PHPicker
         importQuestions(from: text, title: "\u{7c98}\u{8d34}\u{5bfc}\u{5165}\u{9898}\u{5e93}", source: "\u{7c98}\u{8d34}")
     }
 
+    @objc private func aiImportTapped() {
+        let text = importTextView?.text.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        requestAIParse(text: text, title: "\u{7c98}\u{8d34}\u{5bfc}\u{5165}\u{9898}\u{5e93}", source: "\u{7c98}\u{8d34}", fallback: [])
+    }
+
     private func importQuestions(from text: String, title: String, source: String) {
         let parsed = QuestionParser.parse(text)
+        if shouldUseAIParse(localCount: parsed.count, sourceText: text) {
+            requestAIParse(text: text, title: title, source: source, fallback: parsed)
+            return
+        }
         guard !parsed.isEmpty else {
             feedbackText = "\u{672a}\u{8bc6}\u{522b}\u{5230}\u{9898}\u{76ee}\u{ff0c}\u{8bf7}\u{68c0}\u{67e5}\u{683c}\u{5f0f}\u{3002}"
             feedbackIsPositive = false
             setPage(.library, animated: false)
             return
         }
+        finishImportQuestions(parsed, title: title, source: source)
+    }
+
+    private func finishImportQuestions(_ parsed: [Question], title: String, source: String) {
         let paper = Paper(title: title, source: source, questions: parsed)
         papers.append(paper)
         activePaperIndex = papers.count - 1
@@ -1782,6 +1820,105 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate, PHPicker
         feedbackIsPositive = true
         savePersistedState()
         setPage(.library, animated: false)
+    }
+
+    private func shouldUseAIParse(localCount: Int, sourceText: String) -> Bool {
+        guard !apiEndpoint.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return false }
+        return localCount == 0 || (sourceText.count > 700 && localCount < 8)
+    }
+
+    private func requestAIParse(text: String, title: String, source: String, fallback: [Question]) {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            feedbackText = "\u{8bf7}\u{5148}\u{7c98}\u{8d34}\u{6216}\u{9009}\u{62e9}\u{6587}\u{6863}\u{3002}"
+            feedbackIsPositive = false
+            setPage(.importText, animated: false)
+            return
+        }
+        guard let url = URL(string: apiEndpoint.trimmingCharacters(in: .whitespacesAndNewlines)), !apiEndpoint.isEmpty else {
+            if fallback.isEmpty {
+                feedbackText = "\u{5148}\u{5230}\u{6211}\u{7684} - API \u{914d}\u{7f6e}\u{586b}\u{5199}\u{89e3}\u{6790}\u{63a5}\u{53e3}\u{3002}"
+                feedbackIsPositive = false
+                setPage(.importText, animated: false)
+            } else {
+                finishImportQuestions(fallback, title: title, source: source)
+            }
+            return
+        }
+
+        feedbackText = "AI \u{89e3}\u{6790}\u{4e2d}\u{ff0c}\u{5b8c}\u{6210}\u{540e}\u{81ea}\u{52a8}\u{5bfc}\u{5165}\u{3002}"
+        feedbackIsPositive = true
+        setPage(.library, animated: false)
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        if !apiKey.isEmpty {
+            request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
+        }
+        request.httpBody = try? JSONEncoder().encode(AIParseRequest(text: trimmed, title: title, source: source))
+
+        URLSession.shared.dataTask(with: request) { [weak self] data, _, error in
+            DispatchQueue.main.async {
+                guard let self else { return }
+                let aiQuestions = data.flatMap { self.decodeAIQuestions(from: $0) } ?? []
+                if !aiQuestions.isEmpty {
+                    self.finishImportQuestions(aiQuestions, title: title, source: "\(source) AI")
+                } else if !fallback.isEmpty {
+                    self.feedbackText = "\u{0041}\u{0049}\u{672a}\u{8fd4}\u{56de}\u{53ef}\u{7528}\u{9898}\u{76ee}\u{ff0c}\u{5df2}\u{4f7f}\u{7528}\u{672c}\u{5730}\u{89e3}\u{6790}\u{7ed3}\u{679c}\u{3002}"
+                    self.feedbackIsPositive = true
+                    self.finishImportQuestions(fallback, title: title, source: source)
+                } else {
+                    self.feedbackText = error == nil ? "\u{0041}\u{0049}\u{672a}\u{8fd4}\u{56de}\u{53ef}\u{7528}\u{9898}\u{76ee}\u{3002}" : "\u{0041}\u{0049}\u{89e3}\u{6790}\u{8bf7}\u{6c42}\u{5931}\u{8d25}\u{3002}"
+                    self.feedbackIsPositive = false
+                    self.setPage(.library, animated: false)
+                }
+            }
+        }.resume()
+    }
+
+    private func decodeAIQuestions(from data: Data) -> [Question] {
+        if let response = try? JSONDecoder().decode(AIParseResponse.self, from: data) {
+            if let questions = response.questions {
+                let mapped = questions.compactMap(mapAIQuestion)
+                if !mapped.isEmpty {
+                    return mapped
+                }
+            }
+            if let text = response.text {
+                return QuestionParser.parse(response.text ?? text)
+            }
+        }
+        if let text = String(data: data, encoding: .utf8) {
+            return QuestionParser.parse(text)
+        }
+        return []
+    }
+
+    private func mapAIQuestion(_ payload: AIQuestionPayload) -> Question? {
+        let prompt = payload.prompt.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !prompt.isEmpty else { return nil }
+        let kind = payload.kind?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "\u{5355}\u{9009}\u{9898}"
+        let explanation = payload.explanation?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "\u{6682}\u{65e0}\u{89e3}\u{6790}"
+        let options = payload.options?.filter { !$0.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty } ?? []
+        let resolvedOptions = options.isEmpty ? [Option(key: "A", text: explanation == "\u{6682}\u{65e0}\u{89e3}\u{6790}" ? "\u{67e5}\u{770b}\u{89e3}\u{6790}" : explanation)] : options
+        let answer = normalizedAnswerKeys(payload.answer)
+        return Question(prompt: prompt, options: resolvedOptions, answer: answer.isEmpty ? Set(["A"]) : answer, explanation: explanation, kind: kind)
+    }
+
+    private func normalizedAnswerKeys(_ values: [String]?) -> Set<String> {
+        var keys = Set<String>()
+        for value in values ?? [] {
+            for char in value.uppercased() where ["A", "B", "C", "D", "E", "F"].contains(String(char)) {
+                keys.insert(String(char))
+            }
+            if keys.isEmpty, value.contains("\u{6b63}") || value.contains("\u{5bf9}") {
+                keys.insert("A")
+            } else if keys.isEmpty, value.contains("\u{8bef}") || value.contains("\u{9519}") {
+                keys.insert("B")
+            }
+        }
+        return keys
     }
 
     @objc private func openFileImporter() {
