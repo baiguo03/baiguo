@@ -2142,13 +2142,13 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate, PHPicker
         guard let url = URL(string: apiEndpoint.trimmingCharacters(in: .whitespacesAndNewlines)), !apiEndpoint.isEmpty else {
             feedbackText = "\u{5148}\u{5230}\u{6211}\u{7684} - API \u{914d}\u{7f6e}\u{586b}\u{5199}\u{6821}\u{9a8c}\u{63a5}\u{53e3}\u{3002}"
             feedbackIsPositive = false
-            setPage(.questionList, animated: false)
+            render()
             return
         }
         let text = aiValidationSourceText(for: paper)
-        feedbackText = "AI \u{6821}\u{9a8c}\u{4e2d}\u{ff0c}\u{7a0d}\u{540e}\u{4f1a}\u{8fdb}\u{5165}\u{4fee}\u{6b63}\u{9884}\u{89c8}\u{3002}"
+        feedbackText = "AI \u{6821}\u{9a8c}\u{4e2d}\u{ff0c}\u{4fdd}\u{6301}\u{5728}\u{5f53}\u{524d}\u{7f16}\u{8f91}\u{9875}\u{ff0c}\u{6210}\u{529f}\u{540e}\u{518d}\u{8fdb}\u{5165}\u{4fee}\u{6b63}\u{9884}\u{89c8}\u{3002}"
         feedbackIsPositive = true
-        setPage(.questionList, animated: false)
+        render()
 
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
@@ -2165,7 +2165,7 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate, PHPicker
                 guard !questions.isEmpty else {
                     self.feedbackText = error == nil ? "\u{0041}\u{0049}\u{672a}\u{8fd4}\u{56de}\u{53ef}\u{7528}\u{4fee}\u{6b63}\u{7ed3}\u{679c}\u{3002}" : "\u{0041}\u{0049}\u{6821}\u{9a8c}\u{8bf7}\u{6c42}\u{5931}\u{8d25}\u{3002}"
                     self.feedbackIsPositive = false
-                    self.setPage(.questionList, animated: false)
+                    self.render()
                     return
                 }
                 self.aiValidationPaperIndex = index
