@@ -4,7 +4,7 @@ import PhotosUI
 import UniformTypeIdentifiers
 import Vision
 
-final class ViewController: UIViewController, UIDocumentPickerDelegate, PHPickerViewControllerDelegate, UIGestureRecognizerDelegate {
+final class ViewController: UIViewController, UIDocumentPickerDelegate, PHPickerViewControllerDelegate, UIGestureRecognizerDelegate, UITextViewDelegate {
     private struct Paper: Codable {
         let title: String
         let source: String
@@ -21,6 +21,8 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate, PHPicker
         let shuffleOptionsEnabled: Bool
         let apiEndpoint: String
         let apiKey: String
+        let answeredSelections: [String: [String]]?
+        let textAnswers: [String: String]?
     }
 
     private enum Page: Int {
@@ -35,6 +37,7 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate, PHPicker
         case questionList = 8
         case practice = 9
         case questionEdit = 10
+        case questionJump = 11
     }
 
     private enum ButtonStyle {
@@ -81,6 +84,10 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate, PHPicker
     private var editExplanationField: UITextView?
     private var editKindField: UITextField?
     private var selectedAnswers = Set<String>()
+    private var answeredSelections: [String: Set<String>] = [:]
+    private var textAnswers: [String: String] = [:]
+    private var currentTextAnswerView: UITextView?
+    private var blankAnswerFields: [UITextField] = []
     private var modeTitle = "\u{987a}\u{5e8f}\u{7ec3}\u{4e60}"
     private var page: Page = .home
     private var autoTimer: Timer?
@@ -154,9 +161,12 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate, PHPicker
         shuffleOptionsEnabled = state.shuffleOptionsEnabled
         apiEndpoint = state.apiEndpoint
         apiKey = state.apiKey
+        answeredSelections = (state.answeredSelections ?? [:]).mapValues { Set($0) }
+        textAnswers = state.textAnswers ?? [:]
         let maxIndex = max(activeQuestions.count - 1, 0)
         currentIndex = min(currentIndex, maxIndex)
         order = activeQuestions.isEmpty ? [] : Array(activeQuestions.indices)
+        restoreSelectedAnswersForCurrentQuestion()
         if defaults.data(forKey: storageKey) == nil {
             savePersistedState()
         }
@@ -172,7 +182,9 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate, PHPicker
             autoNextEnabled: autoNextEnabled,
             shuffleOptionsEnabled: shuffleOptionsEnabled,
             apiEndpoint: apiEndpoint,
-            apiKey: apiKey
+            apiKey: apiKey,
+            answeredSelections: answeredSelections.mapValues { $0.sorted() },
+            textAnswers: textAnswers
         )
         guard let data = try? JSONEncoder().encode(state) else { return }
         UserDefaults.standard.set(data, forKey: storageKey)
@@ -189,7 +201,7 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate, PHPicker
         tabStack.distribution = .fillEqually
         tabStack.spacing = 0
         tabStack.backgroundColor = UIColor.white.withAlphaComponent(0.96)
-        tabStack.layoutMargins = UIEdgeInsets(top: 12, left: 10, bottom: 20, right: 10)
+        tabStack.layoutMargins = UIEdgeInsets(top: 8, left: 10, bottom: 10, right: 10)
         tabStack.isLayoutMarginsRelativeArrangement = true
 
         view.addSubview(scrollView)
@@ -207,7 +219,7 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate, PHPicker
             tabStack.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             tabStack.trailingAnchor.constraint(equalTo: view.trailingAnchor),
             tabStack.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor),
-            tabStack.heightAnchor.constraint(equalToConstant: 94)
+            tabStack.heightAnchor.constraint(equalToConstant: 82)
         ])
     }
 
@@ -245,6 +257,8 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate, PHPicker
                 self.renderPractice()
             case .questionEdit:
                 self.renderQuestionEditor()
+            case .questionJump:
+                self.renderQuestionJumpPanel()
             }
             self.view.layoutIfNeeded()
         }
@@ -271,7 +285,7 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate, PHPicker
         for item in items {
             let selected = item.0 == page ||
                 (page == .practice && item.0 == .library) ||
-                ((page == .questionList || page == .questionEdit) && item.0 == .library)
+                ((page == .questionList || page == .questionEdit || page == .questionJump) && item.0 == .library)
             let button = makeTabButton(icon: item.1, title: item.2, selected: selected)
             button.tag = item.0.rawValue
             button.addTarget(self, action: #selector(tabTapped(_:)), for: .touchUpInside)
@@ -326,6 +340,9 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate, PHPicker
             addTitle("\u{7ec3}\u{4e60}", "\u{8fd9}\u{4efd}\u{9898}\u{5e93}\u{6682}\u{65e0}\u{9898}\u{76ee}\u{3002}")
             return
         }
+        currentTextAnswerView = nil
+        blankAnswerFields = []
+        restoreSelectedAnswersForCurrentQuestion()
         let question = activeQuestions[order[currentIndex]]
         addTopBar(title: focusedPracticeQuestions == nil ? activePaper.title : "\u{9519}\u{9898}\u{7ec3}\u{4e60}", chipTitle: "\(modeTitle) · \u{8df3}\u{9898}", action: #selector(openQuestionJumpSheet))
         addPracticeMeta()
@@ -334,7 +351,28 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate, PHPicker
             addFeedback(feedbackText, positive: feedbackIsPositive)
         }
         addQuestionCard(question)
-        let revealAnswer = feedbackText != nil && !feedbackIsPositive
+        let isTextQuestion = isTextResponseQuestion(question)
+        let revealAnswer = (feedbackText != nil && !feedbackIsPositive) || (isTextQuestion && isTextAnswerSubmitted(currentIndex))
+        if isFillBlankQuestion(question) {
+            addBlankInputs(question)
+            let submit = makeButton("\u{63d0}\u{4ea4}\u{7b54}\u{6848}", style: .primary)
+            submit.addTarget(self, action: #selector(submitAnswer), for: .touchUpInside)
+            contentStack.addArrangedSubview(submit)
+            if revealAnswer {
+                addAnswerComparison(question)
+            }
+            return
+        }
+        if isTextQuestion {
+            addFreeTextAnswer(question)
+            let submit = makeButton("\u{63d0}\u{4ea4}\u{7b54}\u{6848}", style: .primary)
+            submit.addTarget(self, action: #selector(submitAnswer), for: .touchUpInside)
+            contentStack.addArrangedSubview(submit)
+            if revealAnswer {
+                addAnswerComparison(question)
+            }
+            return
+        }
         for (index, option) in optionsForCurrentQuestion(question).enumerated() {
             let selected = selectedAnswers.contains(option.key)
             let isCorrectOption = revealAnswer && question.answer.contains(option.key)
@@ -474,6 +512,74 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate, PHPicker
         contentStack.addArrangedSubview(save)
     }
 
+    private func renderQuestionJumpPanel() {
+        guard !order.isEmpty else {
+            addTitle("\u{8df3}\u{9898}", "\u{6682}\u{65e0}\u{53ef}\u{7528}\u{9898}\u{76ee}\u{3002}")
+            return
+        }
+        addTopBar(title: "\u{8df3}\u{9898}", chipTitle: "\u{8fd4}\u{56de}", action: #selector(backToPractice))
+        let grouped = Dictionary(grouping: order.enumerated(), by: { item in
+            activeQuestions[item.element].kind
+        })
+        for kind in grouped.keys.sorted() {
+            let items = grouped[kind] ?? []
+            addSectionHeader("\(kind) · \(items.count)\u{9898}")
+            contentStack.addArrangedSubview(makeQuestionNumberGrid(items: items))
+        }
+    }
+
+    private func makeQuestionNumberGrid(items: [(offset: Int, element: Int)]) -> UIView {
+        let stack = UIStackView()
+        stack.axis = .vertical
+        stack.spacing = 10
+        let columns = 5
+        var rowButtons: [UIView] = []
+        for (index, item) in items.enumerated() {
+            if index % columns == 0 {
+                if !rowButtons.isEmpty {
+                    stack.addArrangedSubview(makeGridRow(rowButtons))
+                    rowButtons = []
+                }
+            }
+            let position = item.offset
+            let button = UIButton(type: .system)
+            let answered = isQuestionAnswered(position)
+            button.setTitle("\(position + 1)", for: .normal)
+            button.titleLabel?.font = UIFont.systemFont(ofSize: 15, weight: .bold)
+            button.backgroundColor = answered ? softGreenColor : UIColor.white
+            button.setTitleColor(answered ? accentColor : UIColor.label, for: .normal)
+            button.layer.cornerRadius = 14
+            button.layer.borderWidth = 1
+            button.layer.borderColor = answered ? accentColor.withAlphaComponent(0.30).cgColor : UIColor.separator.cgColor
+            button.heightAnchor.constraint(equalToConstant: 44).isActive = true
+            button.addTarget(self, action: #selector(jumpButtonTapped(_:)), for: .touchUpInside)
+            button.tag = position
+            rowButtons.append(button)
+        }
+        if !rowButtons.isEmpty {
+            stack.addArrangedSubview(makeGridRow(rowButtons))
+        }
+        return stack
+    }
+
+    private func makeGridRow(_ buttons: [UIView]) -> UIView {
+        let row = UIStackView(arrangedSubviews: buttons)
+        row.axis = .horizontal
+        row.spacing = 10
+        row.distribution = .fillEqually
+        return row
+    }
+
+    @objc private func blankAnswerChanged(_ sender: UITextField) {
+        saveCurrentTextDraft()
+    }
+
+    func textViewDidChange(_ textView: UITextView) {
+        if textView === currentTextAnswerView {
+            saveCurrentTextDraft()
+        }
+    }
+
     private func addTitle(_ title: String, _ subtitle: String) {
         let titleLabel = UILabel()
         titleLabel.text = title
@@ -596,11 +702,19 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate, PHPicker
     }
 
     private func addSearchField() {
-        let label = makeText("\u{2315}  \u{641c}\u{7d22}\u{8bd5}\u{5377}", size: 15, weight: .regular, color: .secondaryLabel)
-        label.textAlignment = .center
-        let container = UIStackView(arrangedSubviews: [label])
+        let icon = UIImageView(image: UIImage(systemName: "magnifyingglass"))
+        icon.tintColor = UIColor.tertiaryLabel
+        icon.contentMode = .scaleAspectFit
+        icon.widthAnchor.constraint(equalToConstant: 14).isActive = true
+        icon.heightAnchor.constraint(equalToConstant: 14).isActive = true
+        let label = makeText("\u{641c}\u{7d22}\u{8bd5}\u{5377}", size: 15, weight: .regular, color: .secondaryLabel)
+        let row = UIStackView(arrangedSubviews: [icon, label])
+        row.axis = .horizontal
+        row.alignment = .center
+        row.spacing = 7
+        let container = UIStackView(arrangedSubviews: [row])
         container.alignment = .center
-        container.layoutMargins = UIEdgeInsets(top: 11, left: 14, bottom: 11, right: 14)
+        container.layoutMargins = UIEdgeInsets(top: 10, left: 14, bottom: 10, right: 14)
         container.isLayoutMarginsRelativeArrangement = true
         container.backgroundColor = cardBackgroundColor
         container.layer.cornerRadius = 15
@@ -789,12 +903,133 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate, PHPicker
         let correctOptions = question.options
             .filter { question.answer.contains($0.key) }
             .map { "\($0.key). \($0.text)" }
-        let answerText = correctOptions.isEmpty ? question.explanation : correctOptions.joined(separator: "\n")
+        var answerText = correctOptions.isEmpty ? question.explanation : correctOptions.joined(separator: "\n")
+        if isTextResponseQuestion(question), let first = question.options.first?.text, first != "\u{67e5}\u{770b}\u{89e3}\u{6790}" {
+            answerText = first
+        }
         let title = makeText("\u{6b63}\u{786e}\u{7b54}\u{6848}", size: 13, weight: .bold, color: accentColor)
         let answer = makeText(answerText, size: 15, weight: .semibold)
         let explanation = makeText(question.explanation, size: 13, weight: .regular, color: .secondaryLabel)
         let views = question.explanation == "\u{6682}\u{65e0}\u{89e3}\u{6790}" ? [title, answer] : [title, answer, explanation]
         addCard(views)
+    }
+
+    private func addFreeTextAnswer(_ question: Question) {
+        let editor = makeTextEditor(text: textAnswers[answerCacheKey()] ?? "", height: 132)
+        editor.font = UIFont.systemFont(ofSize: 16, weight: .regular)
+        editor.layer.borderWidth = 0.5
+        editor.layer.borderColor = UIColor.separator.cgColor
+        editor.accessibilityLabel = "\u{7b80}\u{7b54}\u{8f93}\u{5165}\u{6846}"
+        editor.delegate = self
+        currentTextAnswerView = editor
+        contentStack.addArrangedSubview(editor)
+    }
+
+    private func addBlankInputs(_ question: Question) {
+        let count = countBlankPlaceholders(in: question.prompt)
+        let saved = splitStoredBlankAnswer(textAnswers[answerCacheKey()])
+        for index in 0..<count {
+            let key = displayKey(for: index)
+            let value = index < saved.count ? saved[index] : ""
+            let field = makeInput(placeholder: "\(key) \u{7a7a}", text: value, secure: false)
+            field.autocapitalizationType = .sentences
+            field.accessibilityLabel = "\u{586b}\u{7a7a}\u{7b54}\u{6848} \(key)"
+            field.addTarget(self, action: #selector(blankAnswerChanged(_:)), for: .editingChanged)
+            blankAnswerFields.append(field)
+            let row = UIStackView(arrangedSubviews: [makeBlankBadge(key), field])
+            row.axis = .horizontal
+            row.alignment = .center
+            row.spacing = 10
+            contentStack.addArrangedSubview(row)
+        }
+    }
+
+    private func makeBlankBadge(_ key: String) -> UILabel {
+        let label = makeText(key, size: 13, weight: .bold, color: .label)
+        label.textAlignment = .center
+        label.backgroundColor = UIColor.tertiarySystemFill
+        label.layer.cornerRadius = 13
+        label.clipsToBounds = true
+        label.widthAnchor.constraint(equalToConstant: 30).isActive = true
+        label.heightAnchor.constraint(equalToConstant: 30).isActive = true
+        return label
+    }
+
+    private func countBlankPlaceholders(in prompt: String) -> Int {
+        var count = 0
+        count += prompt.components(separatedBy: "____").count - 1
+        count += prompt.components(separatedBy: "\u{ff08}\u{ff09}").count - 1
+        count += prompt.components(separatedBy: "()").count - 1
+        return max(count, 1)
+    }
+
+    private func splitStoredBlankAnswer(_ text: String?) -> [String] {
+        guard let text, !text.isEmpty else { return [] }
+        return text.components(separatedBy: "\u{241f}")
+    }
+
+    private func isFillBlankQuestion(_ question: Question) -> Bool {
+        question.kind.contains("\u{586b}\u{7a7a}")
+    }
+
+    private func isTextResponseQuestion(_ question: Question) -> Bool {
+        let kind = question.kind
+        if isFillBlankQuestion(question) {
+            return true
+        }
+        if kind.contains("\u{7b80}\u{7b54}") || kind.contains("\u{914d}\u{4f0d}") || kind.contains("\u{6848}\u{4f8b}") || kind.contains("\u{540d}\u{8bcd}") {
+            return true
+        }
+        return question.options.count == 1 && question.answer == Set(["A"]) && question.options[0].text.count > 18
+    }
+
+    private func answerCacheKey(forQuestionIndex questionIndex: Int? = nil) -> String {
+        let rawIndex = questionIndex ?? (order.isEmpty ? currentIndex : order[currentIndex])
+        let cachePrefix = focusedPracticeQuestions == nil ? "paper-\(activePaperIndex)" : "wrong"
+        return "\(cachePrefix)-\(rawIndex)"
+    }
+
+    private func saveCurrentSelection() {
+        let key = answerCacheKey()
+        if selectedAnswers.isEmpty {
+            answeredSelections.removeValue(forKey: key)
+        } else {
+            answeredSelections[key] = selectedAnswers
+        }
+        savePersistedState()
+    }
+
+    private func saveCurrentTextAnswer() {
+        saveCurrentTextDraft()
+        let key = answerCacheKey()
+        answeredSelections[key] = ["TEXT"]
+        savePersistedState()
+    }
+
+    private func saveCurrentTextDraft() {
+        let key = answerCacheKey()
+        let answer = blankAnswerFields.isEmpty
+            ? (currentTextAnswerView?.text ?? "")
+            : blankAnswerFields.map { $0.text ?? "" }.joined(separator: "\u{241f}")
+        textAnswers[key] = answer.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private func restoreSelectedAnswersForCurrentQuestion() {
+        selectedAnswers = answeredSelections[answerCacheKey()] ?? Set<String>()
+    }
+
+    private func isQuestionAnswered(_ orderedPosition: Int) -> Bool {
+        guard order.indices.contains(orderedPosition) else { return false }
+        let key = answerCacheKey(forQuestionIndex: order[orderedPosition])
+        let hasSelection = !(answeredSelections[key]?.isEmpty ?? true)
+        let hasText = !(textAnswers[key]?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true)
+        return hasSelection || hasText
+    }
+
+    private func isTextAnswerSubmitted(_ orderedPosition: Int) -> Bool {
+        guard order.indices.contains(orderedPosition) else { return false }
+        let key = answerCacheKey(forQuestionIndex: order[orderedPosition])
+        return answeredSelections[key]?.contains("TEXT") == true
     }
 
     private func optionsForCurrentQuestion(_ question: Question) -> [Option] {
@@ -960,8 +1195,8 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate, PHPicker
         configuration.image = image
         configuration.title = title
         configuration.imagePlacement = .top
-        configuration.imagePadding = 6
-        configuration.contentInsets = NSDirectionalEdgeInsets(top: 4, leading: 0, bottom: 4, trailing: 0)
+        configuration.imagePadding = 4
+        configuration.contentInsets = NSDirectionalEdgeInsets(top: 2, leading: 0, bottom: 2, trailing: 0)
         configuration.baseForegroundColor = color
         configuration.titleTextAttributesTransformer = UIConfigurationTextAttributesTransformer { incoming in
             var outgoing = incoming
@@ -1188,7 +1423,7 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate, PHPicker
         focusedPracticeQuestions = nil
         currentIndex = 0
         order = Array(activeQuestions.indices)
-        selectedAnswers.removeAll()
+        restoreSelectedAnswersForCurrentQuestion()
         feedbackText = nil
         optionOrders.removeAll()
         savePersistedState()
@@ -1247,7 +1482,7 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate, PHPicker
         currentIndex = 0
         order = Array(activeQuestions.indices)
         optionOrders.removeAll()
-        selectedAnswers.removeAll()
+        restoreSelectedAnswersForCurrentQuestion()
         feedbackText = "\u{9898}\u{5e93}\u{5df2}\u{5220}\u{9664}"
         feedbackIsPositive = true
         savePersistedState()
@@ -1263,7 +1498,7 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate, PHPicker
         optionOrders.removeAll()
         modeTitle = random ? "\u{968f}\u{673a}\u{7ec3}\u{4e60}" : "\u{987a}\u{5e8f}\u{7ec3}\u{4e60}"
         currentIndex = 0
-        selectedAnswers.removeAll()
+        restoreSelectedAnswersForCurrentQuestion()
         feedbackText = nil
         savePersistedState()
         setPage(.practice, animated: false)
@@ -1279,42 +1514,32 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate, PHPicker
         optionOrders.removeAll()
         modeTitle = "\u{9519}\u{9898}\u{7ec3}\u{4e60}"
         currentIndex = 0
-        selectedAnswers.removeAll()
+        restoreSelectedAnswersForCurrentQuestion()
         feedbackText = nil
         setPage(.practice, animated: false)
     }
 
     @objc private func openQuestionJumpSheet() {
         guard page == .practice, !order.isEmpty else { return }
-        let alert = UIAlertController(
-            title: "\u{8df3}\u{5230}\u{9898}\u{76ee}",
-            message: "\u{8f93}\u{5165} 1-\(order.count) \u{4e4b}\u{95f4}\u{7684}\u{9898}\u{53f7}",
-            preferredStyle: .alert
-        )
-        alert.addTextField { field in
-            field.placeholder = "\(self.currentIndex + 1)"
-            field.keyboardType = .numberPad
-        }
-        alert.addAction(UIAlertAction(title: "\u{53d6}\u{6d88}", style: .cancel))
-        alert.addAction(UIAlertAction(title: "\u{8df3}\u{8f6c}", style: .default) { [weak self, weak alert] _ in
-            guard
-                let self,
-                let value = alert?.textFields?.first?.text,
-                let number = Int(value.trimmingCharacters(in: .whitespacesAndNewlines))
-            else { return }
-            self.jumpToQuestion(number - 1)
-        })
-        present(alert, animated: true)
+        setPage(.questionJump, animated: false)
     }
 
     private func jumpToQuestion(_ index: Int) {
         guard !order.isEmpty else { return }
         currentIndex = min(max(index, 0), order.count - 1)
-        selectedAnswers.removeAll()
+        restoreSelectedAnswersForCurrentQuestion()
         feedbackText = nil
         savePersistedState()
         page = .practice
         renderCalmQuestionChange()
+    }
+
+    @objc private func jumpButtonTapped(_ sender: UIButton) {
+        jumpToQuestion(sender.tag)
+    }
+
+    @objc private func backToPractice() {
+        setPage(.practice, animated: false)
     }
 
     @objc private func answerTapped(_ sender: UIButton) {
@@ -1328,11 +1553,13 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate, PHPicker
                 selectedAnswers.insert(key)
             }
             feedbackText = nil
+            saveCurrentSelection()
             render()
             return
         }
         selectedAnswers = Set([key])
         feedbackText = nil
+        saveCurrentSelection()
         if autoNextEnabled {
             submitAnswer()
         } else {
@@ -1351,14 +1578,17 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate, PHPicker
         let answer = normalizeEditedAnswer(editAnswerField?.text ?? "")
         let explanation = editExplanationField?.text.trimmingCharacters(in: .whitespacesAndNewlines) ?? oldQuestion.explanation
         let kind = editKindField?.text.trimmingCharacters(in: .whitespacesAndNewlines) ?? oldQuestion.kind
-        guard !prompt.isEmpty, !options.isEmpty, !answer.isEmpty else {
+        let isOpenEditedQuestion = kind.contains("\u{7b80}\u{7b54}") || kind.contains("\u{586b}\u{7a7a}") || kind.contains("\u{914d}\u{4f0d}") || kind.contains("\u{6848}\u{4f8b}") || kind.contains("\u{540d}\u{8bcd}")
+        guard !prompt.isEmpty, (!options.isEmpty || isOpenEditedQuestion), (!answer.isEmpty || isOpenEditedQuestion) else {
             feedbackText = "\u{9898}\u{5e72}\u{3001}\u{9009}\u{9879}\u{548c}\u{7b54}\u{6848}\u{4e0d}\u{80fd}\u{4e3a}\u{7a7a}"
             feedbackIsPositive = false
             render()
             return
         }
 
-        let updatedQuestion = Question(prompt: prompt, options: options, answer: answer, explanation: explanation.isEmpty ? "\u{6682}\u{65e0}\u{89e3}\u{6790}" : explanation, kind: kind.isEmpty ? oldQuestion.kind : kind)
+        let updatedOptions = options.isEmpty ? [Option(key: "A", text: explanation.isEmpty ? "\u{67e5}\u{770b}\u{89e3}\u{6790}" : explanation)] : options
+        let updatedAnswer = answer.isEmpty ? Set(["A"]) : answer
+        let updatedQuestion = Question(prompt: prompt, options: updatedOptions, answer: updatedAnswer, explanation: explanation.isEmpty ? "\u{6682}\u{65e0}\u{89e3}\u{6790}" : explanation, kind: kind.isEmpty ? oldQuestion.kind : kind)
         var paper = papers[editingPaperIndex]
         var questions = paper.questions
         questions[editingQuestionIndex] = updatedQuestion
@@ -1411,6 +1641,14 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate, PHPicker
     @objc private func submitAnswer() {
         guard !activeQuestions.isEmpty, !order.isEmpty else { return }
         let question = activeQuestions[order[currentIndex]]
+        if isFillBlankQuestion(question) || isTextResponseQuestion(question) {
+            saveCurrentTextAnswer()
+            feedbackText = "\u{5df2}\u{63d0}\u{4ea4}\u{ff0c}\u{4e0b}\u{65b9}\u{663e}\u{793a}\u{53c2}\u{8003}\u{7b54}\u{6848}\u{3002}"
+            feedbackIsPositive = true
+            render()
+            return
+        }
+        saveCurrentSelection()
         let correct = selectedAnswers == question.answer
         if correct {
             if autoNextEnabled {
@@ -1447,7 +1685,7 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate, PHPicker
         autoTimer = Timer.scheduledTimer(withTimeInterval: 0.24, repeats: false) { [weak self] _ in
             guard let self else { return }
             self.currentIndex += 1
-            self.selectedAnswers.removeAll()
+            self.restoreSelectedAnswersForCurrentQuestion()
             self.savePersistedState()
             self.renderSlideToNext()
         }
@@ -1470,7 +1708,7 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate, PHPicker
     @objc private func nextQuestion() {
         guard !order.isEmpty else { return }
         currentIndex = min(currentIndex + 1, order.count - 1)
-        selectedAnswers.removeAll()
+        restoreSelectedAnswersForCurrentQuestion()
         feedbackText = nil
         savePersistedState()
         page = .practice
@@ -1480,7 +1718,7 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate, PHPicker
     @objc private func previousQuestion() {
         guard !order.isEmpty else { return }
         currentIndex = max(currentIndex - 1, 0)
-        selectedAnswers.removeAll()
+        restoreSelectedAnswersForCurrentQuestion()
         feedbackText = nil
         savePersistedState()
         page = .practice
@@ -1539,7 +1777,7 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate, PHPicker
         order = Array(parsed.indices)
         optionOrders.removeAll()
         currentIndex = 0
-        selectedAnswers.removeAll()
+        restoreSelectedAnswersForCurrentQuestion()
         feedbackText = "\u{5df2}\u{5bfc}\u{5165} \(parsed.count) \u{9898}"
         feedbackIsPositive = true
         savePersistedState()
@@ -1646,7 +1884,7 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate, PHPicker
     @objc private func shuffleOptionsChanged(_ sender: UISwitch) {
         shuffleOptionsEnabled = sender.isOn
         optionOrders.removeAll()
-        selectedAnswers.removeAll()
+        restoreSelectedAnswersForCurrentQuestion()
         feedbackText = nil
         savePersistedState()
         render()
