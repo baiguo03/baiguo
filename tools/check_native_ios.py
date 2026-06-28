@@ -99,6 +99,7 @@ require("if !autoNextEnabled || question.answer.count > 1" in view, "multi-selec
 require("question.answer.count > 1" in view and "selectedAnswers.remove(key)" in view and "selectedAnswers.insert(key)" in view, "multi-select taps still auto-submit or cannot toggle")
 require("case questionJump" in view and "renderQuestionJumpPanel" in view and "makeQuestionNumberGrid" in view, "quick question jump panel is missing")
 require("isQuestionAnswered" in view and "jumpButtonTapped" in view and "restoreSelectedAnswersForCurrentQuestion" in view, "jump panel does not show answered state or restore answers")
+require("jumpSearchField" in view and "jumpSearchChanged" in view and "filteredJumpItems" in view, "jump page is not searchable/scroll-friendly")
 require("revealAnswer" in view and "isCorrectOption" in view and "isWrongSelectedOption" in view, "wrong answer state does not reveal correct option")
 require("addAnswerComparison" in view, "open/fill questions do not show answer comparison")
 require("answeredSelections" in view and "textAnswers" in view, "answered choices/text are not persisted")
@@ -121,7 +122,10 @@ require("revealPaperDelete" in view and "CGAffineTransform(translationX: -82" in
 require("UILongPressGestureRecognizer" in view and "openPaperSwitchSheet" in view and "switchActivePaper" in view, "home long-press paper switching is missing")
 require("case questionList" in view and "case questionEdit" in view, "question editing pages are missing")
 require("renderQuestionList" in view and "renderQuestionEditor" in view and "saveQuestionEdit" in view, "question editing UI is missing")
+require("editSearchField" in view and "editSearchChanged" in view and "filteredEditableQuestions" in view, "question editing list is not searchable/scroll-friendly")
 require("parseEditedOptions" in view, "edited option parser is missing")
+require("aiValidatePaperTapped" in view and "requestAIValidatePaper" in view and "previewAIValidation" in view, "AI answer validation/review flow is missing")
+require('mode: "validate"' in view and "validation" in view, "AI validation request does not identify validation mode")
 require((ROOT / "ios/QuizTool/QuizTool/Assets.xcassets/AppIcon.appiconset/Icon-60-60@3x.png").exists(), "missing 180px app icon")
 require((ROOT / "ios/QuizTool/QuizTool/Assets.xcassets/AppIcon.appiconset/Icon-1024.png").exists(), "missing 1024px app icon")
 

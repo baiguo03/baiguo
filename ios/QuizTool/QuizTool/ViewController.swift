@@ -29,6 +29,7 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate, PHPicker
         let text: String
         let title: String
         let source: String
+        let mode: String?
     }
 
     private struct AIParseResponse: Codable {
@@ -57,6 +58,7 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate, PHPicker
         case practice = 9
         case questionEdit = 10
         case questionJump = 11
+        case aiValidationPreview = 12
     }
 
     private enum ButtonStyle {
@@ -80,6 +82,8 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate, PHPicker
     private var searchResultsStack: UIStackView?
     private var apiEndpointField: UITextField?
     private var apiKeyField: UITextField?
+    private var jumpSearchField: UITextField?
+    private var editSearchField: UITextField?
     private var feedbackText: String?
     private var feedbackIsPositive = true
     private var autoNextEnabled = true
@@ -87,6 +91,8 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate, PHPicker
     private var apiEndpoint = ""
     private var apiKey = ""
     private var searchQuery = ""
+    private var jumpSearchQuery = ""
+    private var editSearchQuery = ""
 
     private var papers: [Paper] = []
     private var activePaperIndex = 0
@@ -102,6 +108,8 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate, PHPicker
     private var editAnswerField: UITextField?
     private var editExplanationField: UITextView?
     private var editKindField: UITextField?
+    private var aiValidationPaperIndex = 0
+    private var aiValidationQuestions: [Question] = []
     private var selectedAnswers = Set<String>()
     private var answeredSelections: [String: Set<String>] = [:]
     private var textAnswers: [String: String] = [:]
@@ -278,6 +286,8 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate, PHPicker
                 self.renderQuestionEditor()
             case .questionJump:
                 self.renderQuestionJumpPanel()
+            case .aiValidationPreview:
+                self.renderAIValidationPreview()
             }
             self.view.layoutIfNeeded()
         }
@@ -304,7 +314,7 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate, PHPicker
         for item in items {
             let selected = item.0 == page ||
                 (page == .practice && item.0 == .library) ||
-                ((page == .questionList || page == .questionEdit || page == .questionJump) && item.0 == .library)
+                ((page == .questionList || page == .questionEdit || page == .questionJump || page == .aiValidationPreview) && item.0 == .library)
             let button = makeTabButton(icon: item.1, title: item.2, selected: selected)
             button.tag = item.0.rawValue
             button.addTarget(self, action: #selector(tabTapped(_:)), for: .touchUpInside)
@@ -369,7 +379,7 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate, PHPicker
         blankAnswerFields = []
         restoreSelectedAnswersForCurrentQuestion()
         let question = activeQuestions[order[currentIndex]]
-        addTopBar(title: focusedPracticeQuestions == nil ? activePaper.title : "\u{9519}\u{9898}\u{7ec3}\u{4e60}", chipTitle: "\(modeTitle) · \u{8df3}\u{9898}", action: #selector(openQuestionJumpSheet))
+        addTopBar(title: focusedPracticeQuestions == nil ? activePaper.title : "\u{9519}\u{9898}\u{7ec3}\u{4e60}", chipTitle: "\(modeTitle) · \u{9898}\u{53f7}", action: #selector(openQuestionJumpSheet))
         addPracticeMeta()
         addProgress()
         if let feedbackText {
@@ -467,7 +477,7 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate, PHPicker
 
     private func renderAPIConfig() {
         addTopBar(title: "API \u{914d}\u{7f6e}", chipTitle: "\u{8fd4}\u{56de}", action: #selector(backToProfile))
-        addEmptyState("\u{6587}\u{6863}\u{89e3}\u{6790}\u{589e}\u{5f3a}", "\u{586b}\u{5165}\u{63a5}\u{53e3}\u{548c} Key\u{ff0c}\u{540e}\u{7eed}\u{53ef}\u{7528}\u{4e8e} Word/PDF \u{590d}\u{6742}\u{7248}\u{5f0f}\u{8bc6}\u{522b}\u{3002}")
+        addEmptyState("\u{6587}\u{6863}\u{89e3}\u{6790}\u{548c} AI \u{6821}\u{9a8c}", "API URL \u{586b}\u{540e}\u{7aef}\u{5730}\u{5740}\u{ff0c}API Key \u{586b}\u{65b0}\u{5bc6}\u{94a5}\u{3002}\u{540e}\u{7aef}\u{8d1f}\u{8d23}\u{8fde}\u{63a5} AI\u{ff0c}\u{4e0d}\u{5efa}\u{8bae}\u{76f4}\u{63a5}\u{628a}\u{5bc6}\u{94a5}\u{66b4}\u{9732}\u{5728} App \u{91cc}\u{3002}")
         apiEndpointField = makeInput(placeholder: "API URL", text: apiEndpoint, secure: false)
         apiKeyField = makeInput(placeholder: "API Key", text: apiKey, secure: true)
         if let apiEndpointField { contentStack.addArrangedSubview(apiEndpointField) }
@@ -494,12 +504,21 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate, PHPicker
         let paper = papers[editingPaperIndex]
         addTopBar(title: "\u{7f16}\u{8f91}\u{9898}\u{76ee}", chipTitle: "\u{8fd4}\u{56de}", action: #selector(backToLibrary))
         addEmptyState(paper.title, "\(paper.questions.count) \u{9898}\u{ff0c}\u{70b9}\u{51fb}\u{5355}\u{9898}\u{53ef}\u{4fee}\u{6539}\u{9898}\u{5e72}\u{3001}\u{9009}\u{9879}\u{3001}\u{7b54}\u{6848}\u{548c}\u{89e3}\u{6790}\u{3002}")
+        editSearchField = makeInput(placeholder: "\u{641c}\u{7d22}\u{9898}\u{53f7}\u{3001}\u{9898}\u{5e72}\u{3001}\u{7b54}\u{6848}\u{6216}\u{9898}\u{578b}", text: editSearchQuery, secure: false)
+        editSearchField?.addTarget(self, action: #selector(editSearchChanged(_:)), for: .editingChanged)
+        if let editSearchField { contentStack.addArrangedSubview(editSearchField) }
+        let validate = makeButton("AI \u{6821}\u{9a8c}\u{672c}\u{9898}\u{5e93}", style: .secondary)
+        validate.addTarget(self, action: #selector(aiValidatePaperTapped), for: .touchUpInside)
+        contentStack.addArrangedSubview(validate)
         var rows: [UIView] = []
-        for index in paper.questions.indices {
-            let question = paper.questions[index]
+        for (index, question) in filteredEditableQuestions(for: paper) {
             rows.append(row("\(index + 1). \(question.prompt)", subtitle: "\(question.kind) \u{00b7} \u{7b54}\u{6848} \(question.answer.sorted().joined(separator: ","))", tag: index, action: #selector(questionEditTapped(_:))))
         }
-        addListGroup(rows)
+        if rows.isEmpty {
+            addEmptyState("\u{672a}\u{627e}\u{5230}\u{9898}\u{76ee}", "\u{6362}\u{4e2a}\u{9898}\u{53f7}\u{6216}\u{5173}\u{952e}\u{8bcd}\u{8bd5}\u{8bd5}\u{3002}")
+        } else {
+            addListGroup(rows)
+        }
     }
 
     private func renderQuestionEditor() {
@@ -537,13 +556,58 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate, PHPicker
         contentStack.addArrangedSubview(save)
     }
 
-    private func renderQuestionJumpPanel() {
-        guard !order.isEmpty else {
-            addTitle("\u{8df3}\u{9898}", "\u{6682}\u{65e0}\u{53ef}\u{7528}\u{9898}\u{76ee}\u{3002}")
+    private func renderAIValidationPreview() {
+        guard papers.indices.contains(aiValidationPaperIndex), !aiValidationQuestions.isEmpty else {
+            setPage(.questionList, animated: false)
             return
         }
-        addTopBar(title: "\u{8df3}\u{9898}", chipTitle: "\u{8fd4}\u{56de}", action: #selector(backToPractice))
-        let grouped = Dictionary(grouping: order.enumerated(), by: { item in
+        let paper = papers[aiValidationPaperIndex]
+        addTopBar(title: "AI \u{6821}\u{9a8c}\u{9884}\u{89c8}", chipTitle: "\u{8fd4}\u{56de}", action: #selector(backToQuestionList))
+        addEmptyState(
+            "\u{5f85}\u{5e94}\u{7528}\u{4fee}\u{6b63}",
+            "\u{539f}\u{9898} \(paper.questions.count) \u{9898}\u{ff0c}AI \u{8fd4}\u{56de} \(aiValidationQuestions.count) \u{9898}\u{3002}\u{8bf7}\u{5148}\u{770b}\u{6982}\u{89c8}\u{ff0c}\u{786e}\u{8ba4}\u{540e}\u{518d}\u{5e94}\u{7528}\u{3002}"
+        )
+        let apply = makeButton("\u{5e94}\u{7528} AI \u{4fee}\u{6b63}", style: .primary)
+        apply.addTarget(self, action: #selector(applyAIValidation), for: .touchUpInside)
+        contentStack.addArrangedSubview(apply)
+        let cancel = makeButton("\u{6682}\u{4e0d}\u{5e94}\u{7528}", style: .secondary)
+        cancel.addTarget(self, action: #selector(backToQuestionList), for: .touchUpInside)
+        contentStack.addArrangedSubview(cancel)
+
+        var rows: [UIView] = []
+        for (index, question) in aiValidationQuestions.prefix(30).enumerated() {
+            let original = paper.questions.indices.contains(index) ? paper.questions[index] : nil
+            let changed = original.map { old in
+                old.prompt != question.prompt
+                    || old.kind != question.kind
+                    || old.answer != question.answer
+                    || old.options.map { "\($0.key):\($0.text)" } != question.options.map { "\($0.key):\($0.text)" }
+                    || old.explanation != question.explanation
+            } ?? true
+            let marker = changed ? "\u{5df2}\u{4fee}\u{6b63}" : "\u{65e0}\u{53d8}\u{5316}"
+            rows.append(row("\(index + 1). \(question.prompt)", subtitle: "\(marker) · \(question.kind) · \u{7b54}\u{6848} \(question.answer.sorted().joined(separator: ","))", action: nil))
+        }
+        addListGroup(rows)
+        if aiValidationQuestions.count > 30 {
+            addEmptyState("\u{53ea}\u{9884}\u{89c8}\u{524d} 30 \u{9898}", "\u{5e94}\u{7528}\u{65f6}\u{4f1a}\u{4fdd}\u{5b58}\u{5168}\u{90e8} \(aiValidationQuestions.count) \u{9898}\u{3002}")
+        }
+    }
+
+    private func renderQuestionJumpPanel() {
+        guard !order.isEmpty else {
+            addTitle("\u{9898}\u{53f7}\u{5bfc}\u{822a}", "\u{6682}\u{65e0}\u{53ef}\u{7528}\u{9898}\u{76ee}\u{3002}")
+            return
+        }
+        addTopBar(title: "\u{9898}\u{53f7}\u{5bfc}\u{822a}", chipTitle: "\u{8fd4}\u{56de}", action: #selector(backToPractice))
+        jumpSearchField = makeInput(placeholder: "\u{641c}\u{7d22}\u{9898}\u{53f7}\u{3001}\u{9898}\u{578b}\u{6216}\u{9898}\u{5e72}", text: jumpSearchQuery, secure: false)
+        jumpSearchField?.addTarget(self, action: #selector(jumpSearchChanged(_:)), for: .editingChanged)
+        if let jumpSearchField { contentStack.addArrangedSubview(jumpSearchField) }
+        let filtered = filteredJumpItems()
+        guard !filtered.isEmpty else {
+            addEmptyState("\u{672a}\u{627e}\u{5230}\u{9898}\u{53f7}", "\u{6362}\u{4e2a}\u{9898}\u{53f7}\u{6216}\u{5173}\u{952e}\u{8bcd}\u{8bd5}\u{8bd5}\u{3002}")
+            return
+        }
+        let grouped = Dictionary(grouping: filtered, by: { item in
             activeQuestions[item.element].kind
         })
         for kind in grouped.keys.sorted() {
@@ -585,6 +649,34 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate, PHPicker
             stack.addArrangedSubview(makeGridRow(rowButtons))
         }
         return stack
+    }
+
+    private func filteredJumpItems() -> [(offset: Int, element: Int)] {
+        let query = jumpSearchQuery.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let items = Array(order.enumerated())
+        guard !query.isEmpty else { return items }
+        return items.filter { item in
+            let question = activeQuestions[item.element]
+            let visibleNumber = "\(item.offset + 1)"
+            return visibleNumber.contains(query)
+                || question.kind.lowercased().contains(query)
+                || question.prompt.lowercased().contains(query)
+                || question.answer.sorted().joined(separator: ",").lowercased().contains(query)
+        }
+    }
+
+    private func filteredEditableQuestions(for paper: Paper) -> [(Int, Question)] {
+        let query = editSearchQuery.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let items = Array(paper.questions.enumerated())
+        guard !query.isEmpty else { return items }
+        return items.filter { index, question in
+            let visibleNumber = "\(index + 1)"
+            return visibleNumber.contains(query)
+                || question.kind.lowercased().contains(query)
+                || question.prompt.lowercased().contains(query)
+                || question.answer.sorted().joined(separator: ",").lowercased().contains(query)
+                || question.explanation.lowercased().contains(query)
+        }
     }
 
     private func makeGridRow(_ buttons: [UIView]) -> UIView {
@@ -1341,6 +1433,16 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate, PHPicker
         refreshSearchResults()
     }
 
+    @objc private func jumpSearchChanged(_ sender: UITextField) {
+        jumpSearchQuery = sender.text ?? ""
+        render()
+    }
+
+    @objc private func editSearchChanged(_ sender: UITextField) {
+        editSearchQuery = sender.text ?? ""
+        render()
+    }
+
     @objc private func saveAPIConfig() {
         apiEndpoint = apiEndpointField?.text?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         apiKey = apiKeyField?.text?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
@@ -1474,6 +1576,29 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate, PHPicker
     private func openQuestionList(for index: Int) {
         guard papers.indices.contains(index) else { return }
         editingPaperIndex = index
+        editSearchQuery = ""
+        setPage(.questionList, animated: false)
+    }
+
+    @objc private func aiValidatePaperTapped() {
+        guard papers.indices.contains(editingPaperIndex) else { return }
+        requestAIValidatePaper(papers[editingPaperIndex], index: editingPaperIndex)
+    }
+
+    @objc private func applyAIValidation() {
+        guard papers.indices.contains(aiValidationPaperIndex), !aiValidationQuestions.isEmpty else { return }
+        let paper = papers[aiValidationPaperIndex]
+        papers[aiValidationPaperIndex] = Paper(title: paper.title, source: "\(paper.source) AI validation", questions: aiValidationQuestions)
+        activePaperIndex = aiValidationPaperIndex
+        editingPaperIndex = aiValidationPaperIndex
+        order = Array(aiValidationQuestions.indices)
+        currentIndex = 0
+        optionOrders.removeAll()
+        selectedAnswers.removeAll()
+        aiValidationQuestions = []
+        feedbackText = "\u{5df2}\u{5e94}\u{7528} AI \u{6821}\u{9a8c}\u{4fee}\u{6b63}"
+        feedbackIsPositive = true
+        savePersistedState()
         setPage(.questionList, animated: false)
     }
 
@@ -1856,7 +1981,7 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate, PHPicker
         if !apiKey.isEmpty {
             request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
         }
-        request.httpBody = try? JSONEncoder().encode(AIParseRequest(text: trimmed, title: title, source: source))
+        request.httpBody = try? JSONEncoder().encode(AIParseRequest(text: trimmed, title: title, source: source, mode: "parse"))
 
         URLSession.shared.dataTask(with: request) { [weak self] data, _, error in
             DispatchQueue.main.async {
@@ -1875,6 +2000,65 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate, PHPicker
                 }
             }
         }.resume()
+    }
+
+    private func requestAIValidatePaper(_ paper: Paper, index: Int) {
+        guard let url = URL(string: apiEndpoint.trimmingCharacters(in: .whitespacesAndNewlines)), !apiEndpoint.isEmpty else {
+            feedbackText = "\u{5148}\u{5230}\u{6211}\u{7684} - API \u{914d}\u{7f6e}\u{586b}\u{5199}\u{6821}\u{9a8c}\u{63a5}\u{53e3}\u{3002}"
+            feedbackIsPositive = false
+            setPage(.questionList, animated: false)
+            return
+        }
+        let text = aiValidationSourceText(for: paper)
+        feedbackText = "AI \u{6821}\u{9a8c}\u{4e2d}\u{ff0c}\u{7a0d}\u{540e}\u{4f1a}\u{8fdb}\u{5165}\u{4fee}\u{6b63}\u{9884}\u{89c8}\u{3002}"
+        feedbackIsPositive = true
+        setPage(.questionList, animated: false)
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        if !apiKey.isEmpty {
+            request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
+        }
+        request.httpBody = try? JSONEncoder().encode(AIParseRequest(text: text, title: paper.title, source: paper.source, mode: "validate"))
+
+        URLSession.shared.dataTask(with: request) { [weak self] data, _, error in
+            DispatchQueue.main.async {
+                guard let self else { return }
+                let questions = data.flatMap { self.decodeAIQuestions(from: $0) } ?? []
+                guard !questions.isEmpty else {
+                    self.feedbackText = error == nil ? "\u{0041}\u{0049}\u{672a}\u{8fd4}\u{56de}\u{53ef}\u{7528}\u{4fee}\u{6b63}\u{7ed3}\u{679c}\u{3002}" : "\u{0041}\u{0049}\u{6821}\u{9a8c}\u{8bf7}\u{6c42}\u{5931}\u{8d25}\u{3002}"
+                    self.feedbackIsPositive = false
+                    self.setPage(.questionList, animated: false)
+                    return
+                }
+                self.aiValidationPaperIndex = index
+                self.aiValidationQuestions = questions
+                self.previewAIValidation()
+            }
+        }.resume()
+    }
+
+    private func aiValidationSourceText(for paper: Paper) -> String {
+        var lines: [String] = [
+            "mode: validate",
+            "\u{9898}\u{5e93}: \(paper.title)",
+            "\u{6765}\u{6e90}: \(paper.source)",
+            "\u{8bf7}\u{6821}\u{9a8c}\u{9898}\u{578b}\u{3001}\u{9009}\u{9879}\u{3001}\u{7b54}\u{6848}\u{548c}\u{89e3}\u{6790}\u{ff0c}\u{4fdd}\u{6301}\u{9898}\u{76ee}\u{6570}\u{91cf}\u{5c3d}\u{91cf}\u{4e00}\u{81f4}\u{3002}"
+        ]
+        for (index, question) in paper.questions.enumerated() {
+            lines.append("\n\(index + 1). [\(question.kind)] \(question.prompt)")
+            for option in question.options {
+                lines.append("\(option.key). \(option.text)")
+            }
+            lines.append("\u{7b54}\u{6848}: \(question.answer.sorted().joined(separator: ","))")
+            lines.append("\u{89e3}\u{6790}: \(question.explanation)")
+        }
+        return lines.joined(separator: "\n")
+    }
+
+    private func previewAIValidation() {
+        setPage(.aiValidationPreview, animated: false)
     }
 
     private func decodeAIQuestions(from data: Data) -> [Question] {
