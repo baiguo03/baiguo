@@ -2218,12 +2218,39 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate, PHPicker
     private func mapAIQuestion(_ payload: AIQuestionPayload) -> Question? {
         let prompt = payload.prompt.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !prompt.isEmpty else { return nil }
+        guard !isAIHeaderQuestion(prompt) else { return nil }
         let kind = payload.kind?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "\u{5355}\u{9009}\u{9898}"
-        let explanation = payload.explanation?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "\u{6682}\u{65e0}\u{89e3}\u{6790}"
+        let rawExplanation = payload.explanation?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         let options = payload.options?.filter { !$0.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty } ?? []
-        let resolvedOptions = options.isEmpty ? [Option(key: "A", text: explanation == "\u{6682}\u{65e0}\u{89e3}\u{6790}" ? "\u{67e5}\u{770b}\u{89e3}\u{6790}" : explanation)] : options
         let answer = normalizedAnswerKeys(payload.answer)
+        let explanation = conciseExplanation(rawExplanation, prompt: prompt, options: options, answer: answer)
+        let resolvedOptions = options.isEmpty ? [Option(key: "A", text: explanation == "\u{6682}\u{65e0}\u{89e3}\u{6790}" ? "\u{67e5}\u{770b}\u{89e3}\u{6790}" : explanation)] : options
         return Question(prompt: prompt, options: resolvedOptions, answer: answer.isEmpty ? Set(["A"]) : answer, explanation: explanation, kind: kind)
+    }
+
+    private func isAIHeaderQuestion(_ prompt: String) -> Bool {
+        let normalized = prompt.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        return normalized.hasPrefix("mode:")
+            || normalized.hasPrefix("题库:")
+            || normalized.hasPrefix("\u{9898}\u{5e93}\u{ff1a}")
+            || normalized.hasPrefix("来源:")
+            || normalized.hasPrefix("\u{6765}\u{6e90}\u{ff1a}")
+            || normalized.contains("\u{8bf7}\u{6821}\u{9a8c}\u{9898}\u{578b}")
+    }
+
+    private func conciseExplanation(_ raw: String, prompt: String, options: [Option], answer: Set<String>) -> String {
+        let cleaned = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !cleaned.isEmpty && cleaned != "\u{6682}\u{65e0}\u{89e3}\u{6790}" {
+            return cleaned.count > 90 ? String(cleaned.prefix(90)) : cleaned
+        }
+        let selected = options
+            .filter { answer.contains($0.key) }
+            .map { "\($0.key).\($0.text)" }
+            .joined(separator: "\u{3001}")
+        if !selected.isEmpty {
+            return "\u{5173}\u{952e}\u{770b}\u{6b63}\u{786e}\u{9009}\u{9879}\u{ff1a}\(selected)\u{3002}"
+        }
+        return "\u{6839}\u{636e}\u{9898}\u{5e72}\u{5173}\u{952e}\u{4fe1}\u{606f}\u{5224}\u{65ad}\u{ff0c}\u{7b54}\u{6848}\u{4ee5}\u{6821}\u{9a8c}\u{7ed3}\u{679c}\u{4e3a}\u{51c6}\u{3002}"
     }
 
     private func normalizedAnswerKeys(_ values: [String]?) -> Set<String> {
