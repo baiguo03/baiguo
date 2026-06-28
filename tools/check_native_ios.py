@@ -102,7 +102,9 @@ require("if !autoNextEnabled || question.answer.count > 1" in view, "multi-selec
 require("question.answer.count > 1" in view and "selectedAnswers.remove(key)" in view and "selectedAnswers.insert(key)" in view, "multi-select taps still auto-submit or cannot toggle")
 require("case questionJump" in view and "renderQuestionJumpPanel" in view and "makeQuestionNumberGrid" in view, "quick question jump panel is missing")
 require("isQuestionAnswered" in view and "jumpButtonTapped" in view and "restoreSelectedAnswersForCurrentQuestion" in view, "jump panel does not show answered state or restore answers")
-require("jumpSearchField" in view and "jumpSearchChanged" in view and "filteredJumpItems" in view, "jump page is not searchable/scroll-friendly")
+require("jumpSearchField" in view and "applyJumpSearch" in view and "filteredJumpItems" in view, "jump page is not searchable/scroll-friendly")
+question_jump_body = view.split("private func renderQuestionJumpPanel()", 1)[1].split("private func makeQuestionNumberGrid", 1)[0]
+require(".editingChanged" not in question_jump_body, "question jump search still re-renders on every keystroke")
 require("revealAnswer" in view and "isCorrectOption" in view and "isWrongSelectedOption" in view, "wrong answer state does not reveal correct option")
 require("addAnswerComparison" in view, "open/fill questions do not show answer comparison")
 require("answeredSelections" in view and "textAnswers" in view, "answered choices/text are not persisted")
@@ -156,6 +158,8 @@ require("isAIHeaderQuestion" in view and "compactMap(mapAIQuestion)" in view, "A
 require("conciseExplanation" in view and '"\\u{6682}\\u{65e0}\\u{89e3}\\u{6790}"' in view, "AI validation does not generate concise fallback explanations")
 require("mergedAIValidationQuestions" in view and "mergedQuestion(original: original, ai: aiQuestion)" in view, "AI validation should merge with original questions instead of replacing them")
 require("case aiValidationQuestionPreview" in view and "renderAIValidationQuestionPreview" in view and "aiValidationPreviewTapped" in view, "AI validation preview rows should open a detail view")
+require("normalizedQuestion" in view and "hasObjectiveQuestionSignal" in view and "replacingOccurrences(of: #\"^\\s*(\\[[^\\]]+\\]\\s*)+\"#" in view, "AI question type normalization is missing")
+require("textView(_ textView: UITextView, shouldChangeTextIn" in view and 'text == "\\n"' in view and "returnKeyType = .done" in view, "text editors do not dismiss keyboard from the return key")
 apply_ai_body = view.split("@objc private func applyAIValidation()", 1)[1].split("private func confirmDeletePaper", 1)[0]
 require("questions: mergedQuestions" in apply_ai_body and "questions: aiValidationQuestions" not in apply_ai_body, "AI validation still replaces the whole paper with raw AI output")
 ai_validate_body = view.split("private func requestAIValidatePaper", 1)[1].split("private func aiValidationSourceText", 1)[0]
