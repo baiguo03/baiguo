@@ -288,9 +288,34 @@ enum QuestionParser {
         }
 
         guard !prompt.isEmpty, !options.isEmpty else { return nil }
+        if isCaseLikePrompt(prompt) {
+            let freeformAnswer = fallbackFreeformAnswer ?? explanation
+            return Question(
+                prompt: prompt,
+                options: [],
+                answer: [],
+                explanation: freeformAnswer.isEmpty ? explanation : freeformAnswer,
+                kind: "\u{6848}\u{4f8b}\u{5206}\u{6790}\u{9898}"
+            )
+        }
         let resolvedAnswer = resolvedBlockAnswer.isEmpty ? Set([options[0].key]) : resolvedBlockAnswer
         let kind = resolvedAnswer.count > 1 ? "\u{591a}\u{9009}\u{9898}" : "\u{5355}\u{9009}\u{9898}"
         return Question(prompt: prompt, options: options, answer: resolvedAnswer, explanation: explanation, kind: kind)
+    }
+
+    private static func isCaseLikePrompt(_ prompt: String) -> Bool {
+        let explicitObjective = prompt.contains("\u{5355}\u{9009}") ||
+            prompt.contains("\u{5355}\u{9879}\u{9009}\u{62e9}") ||
+            prompt.contains("\u{591a}\u{9009}") ||
+            prompt.contains("\u{591a}\u{9879}\u{9009}\u{62e9}") ||
+            prompt.contains("\u{5224}\u{65ad}")
+        guard !explicitObjective else { return false }
+        return prompt.contains("\u{6848}\u{4f8b}") ||
+            prompt.contains("\u{75c5}\u{4f8b}") ||
+            prompt.contains("\u{95ee}\u{9898}") ||
+            prompt.contains("\u{4f9d}\u{636e}") ||
+            prompt.contains("\u{5e76}\u{53d1}\u{75c7}") ||
+            prompt.contains("\u{5206}\u{6790}")
     }
 
     private static func isOpenQuestionKind(_ kind: String) -> Bool {

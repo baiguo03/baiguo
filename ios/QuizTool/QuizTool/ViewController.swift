@@ -102,6 +102,7 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate, PHPicker
     private var apiKey = ""
     private var searchQuery = ""
     private var jumpSearchQuery = ""
+    private var jumpVisibleLimit = 80
     private var editSearchQuery = ""
     private var importDraftText = ""
     private var isAIValidating = false
@@ -723,13 +724,19 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate, PHPicker
             addEmptyState("\u{672a}\u{627e}\u{5230}\u{9898}\u{53f7}", "\u{6362}\u{4e2a}\u{9898}\u{53f7}\u{6216}\u{5173}\u{952e}\u{8bcd}\u{8bd5}\u{8bd5}\u{3002}")
             return
         }
-        let grouped = Dictionary(grouping: filtered, by: { item in
+        let visibleItems = Array(filtered.prefix(jumpVisibleLimit))
+        let grouped = Dictionary(grouping: visibleItems, by: { item in
             activeQuestions[item.element].kind
         })
         for kind in grouped.keys.sorted() {
             let items = grouped[kind] ?? []
             addSectionHeader("\(kind) · \(items.count)\u{9898}")
             contentStack.addArrangedSubview(makeQuestionNumberGrid(items: items))
+        }
+        if filtered.count > visibleItems.count {
+            let more = makeButton("\u{663e}\u{793a}\u{66f4}\u{591a}\u{9898}\u{53f7} \(visibleItems.count)/\(filtered.count)", style: .secondary)
+            more.addTarget(self, action: #selector(loadMoreJumpItems), for: .touchUpInside)
+            contentStack.addArrangedSubview(more)
         }
     }
 
@@ -1262,13 +1269,27 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate, PHPicker
             .trimmingCharacters(in: .whitespacesAndNewlines)
         var resolvedKind = question.kind.trimmingCharacters(in: .whitespacesAndNewlines)
         let taggedText = question.prompt + " " + question.kind
-        if question.options.count >= 2 {
-            if taggedText.contains("\u{591a}\u{9009}") || question.answer.count > 1 {
+        let explicitSingle = taggedText.contains("\u{5355}\u{9009}") || taggedText.contains("\u{5355}\u{9879}\u{9009}\u{62e9}")
+        let explicitMulti = taggedText.contains("\u{591a}\u{9009}") || taggedText.contains("\u{591a}\u{9879}\u{9009}\u{62e9}")
+        let explicitJudgement = taggedText.contains("\u{5224}\u{65ad}")
+        let explicitObjective = explicitSingle || explicitMulti || explicitJudgement
+        let caseLike = taggedText.contains("\u{6848}\u{4f8b}") ||
+            taggedText.contains("\u{75c5}\u{4f8b}") ||
+            taggedText.contains("\u{95ee}\u{9898}") ||
+            taggedText.contains("\u{4f9d}\u{636e}") ||
+            taggedText.contains("\u{5e76}\u{53d1}\u{75c7}") ||
+            taggedText.contains("\u{5206}\u{6790}")
+        if caseLike && !explicitObjective {
+            resolvedKind = "\u{6848}\u{4f8b}\u{5206}\u{6790}\u{9898}"
+        } else if question.options.count >= 2 {
+            if explicitMulti && question.answer.count > 1 {
                 resolvedKind = "\u{591a}\u{9009}\u{9898}"
-            } else if taggedText.contains("\u{5224}\u{65ad}") {
+            } else if explicitJudgement {
                 resolvedKind = "\u{5224}\u{65ad}\u{9898}"
-            } else if taggedText.contains("\u{5355}\u{9009}") || resolvedKind.contains("\u{586b}\u{7a7a}") {
+            } else if explicitSingle || explicitMulti || question.answer.count <= 1 || resolvedKind.contains("\u{586b}\u{7a7a}") {
                 resolvedKind = "\u{5355}\u{9009}\u{9898}"
+            } else if question.answer.count > 1 {
+                resolvedKind = "\u{591a}\u{9009}\u{9898}"
             }
         }
         return Question(prompt: cleanedPrompt.isEmpty ? question.prompt : cleanedPrompt, options: question.options, answer: question.answer, explanation: question.explanation, kind: resolvedKind.isEmpty ? question.kind : resolvedKind)
@@ -1615,7 +1636,13 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate, PHPicker
 
     @objc private func applyJumpSearch() {
         jumpSearchQuery = jumpSearchField?.text ?? ""
+        jumpVisibleLimit = 80
         jumpSearchField?.resignFirstResponder()
+        render()
+    }
+
+    @objc private func loadMoreJumpItems() {
+        jumpVisibleLimit += 80
         render()
     }
 
@@ -1954,6 +1981,7 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate, PHPicker
 
     @objc private func openQuestionJumpSheet() {
         guard page == .practice, !order.isEmpty else { return }
+        jumpVisibleLimit = 80
         setPage(.questionJump, animated: false)
     }
 
@@ -2210,7 +2238,7 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate, PHPicker
         let text = importTextView?.text.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         importDraftText = text
         view.endEditing(true)
-        requestAIParse(text: text, title: "\u{7c98}\u{8d34}\u{5bfc}\u{5165}\u{9898}\u{5e93}", source: "\u{7c98}\u{8d34}", fallback: [])
+        requestAIParse(text: text, title: "\u{7c98}\u{8d34}\u{5bfc}\u{5165}\u{9898}\u{5e93}", source: "\u{7c98}\u{8d34}", fallback: QuestionParser.parse(text))
     }
 
     @objc private func dismissImportKeyboard() {
@@ -2297,8 +2325,9 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate, PHPicker
             DispatchQueue.main.async {
                 guard let self else { return }
                 let aiQuestions = data.flatMap { self.decodeAIQuestions(from: $0) } ?? []
-                if !aiQuestions.isEmpty {
-                    self.finishImportQuestions(aiQuestions, title: title, source: "\(source) AI")
+                let resolvedQuestions = self.bestAIImportQuestions(aiQuestions: aiQuestions, fallback: fallback)
+                if !resolvedQuestions.isEmpty {
+                    self.finishImportQuestions(resolvedQuestions, title: title, source: resolvedQuestions.count == aiQuestions.count ? "\(source) AI" : source)
                 } else if !fallback.isEmpty {
                     self.feedbackText = "\u{0041}\u{0049}\u{672a}\u{8fd4}\u{56de}\u{53ef}\u{7528}\u{9898}\u{76ee}\u{ff0c}\u{5df2}\u{4f7f}\u{7528}\u{672c}\u{5730}\u{89e3}\u{6790}\u{7ed3}\u{679c}\u{3002}"
                     self.feedbackIsPositive = true
@@ -2352,6 +2381,25 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate, PHPicker
         }.resume()
     }
 
+    private func bestAIImportQuestions(aiQuestions: [Question], fallback: [Question]) -> [Question] {
+        let normalizedAI = aiQuestions.map(normalizedQuestion)
+        let normalizedFallback = fallback.map(normalizedQuestion)
+        guard !normalizedFallback.isEmpty else { return normalizedAI }
+        guard !normalizedAI.isEmpty else { return normalizedFallback }
+        let minimumUsefulCount = max(1, Int(Double(normalizedFallback.count) * 0.90))
+        if normalizedAI.count < minimumUsefulCount {
+            feedbackText = "\u{0041}\u{0049}\u{8fd4}\u{56de}\u{9898}\u{6570}\u{504f}\u{5c11}\u{ff0c}\u{5df2}\u{4fdd}\u{7559}\u{672c}\u{5730}\u{89e3}\u{6790}\u{7ed3}\u{679c}\u{3002}"
+            feedbackIsPositive = true
+            return normalizedFallback
+        }
+        if normalizedAI.count == normalizedFallback.count {
+            return normalizedFallback.enumerated().map { index, original in
+                mergedQuestion(original: original, ai: normalizedAI[index])
+            }
+        }
+        return normalizedAI
+    }
+
     private func aiValidationSourceText(for paper: Paper) -> String {
         var lines: [String] = [
             "\u{53ea}\u{6821}\u{9a8c}\u{4e0b}\u{9762}\u{7f16}\u{53f7}\u{9898}\u{76ee}\u{7684}\u{9898}\u{578b}\u{3001}\u{9009}\u{9879}\u{3001}\u{7b54}\u{6848}\u{548c}\u{7b80}\u{77ed}\u{89e3}\u{6790}\u{ff0c}\u{4e0d}\u{8981}\u{8fd4}\u{56de}\u{9898}\u{5e93}\u{540d}\u{3001}\u{6765}\u{6e90}\u{3001}mode \u{6216}\u{8bf4}\u{660e}\u{6587}\u{5b57}\u{3002}"
@@ -2402,13 +2450,16 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate, PHPicker
         let options = payload.options?.filter { !$0.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty } ?? []
         let answer = normalizedAnswerKeys(payload.answer)
         let explanation = conciseExplanation(rawExplanation, prompt: prompt, options: options, answer: answer)
-        let resolvedOptions = options.isEmpty ? [Option(key: "A", text: explanation == "\u{6682}\u{65e0}\u{89e3}\u{6790}" ? "\u{67e5}\u{770b}\u{89e3}\u{6790}" : explanation)] : options
-        return normalizedQuestion(Question(prompt: prompt, options: resolvedOptions, answer: answer.isEmpty ? Set(["A"]) : answer, explanation: explanation, kind: kind))
+        let isOpenKind = kind.contains("\u{7b80}\u{7b54}") || kind.contains("\u{586b}\u{7a7a}") || kind.contains("\u{914d}\u{4f0d}") || kind.contains("\u{6848}\u{4f8b}") || kind.contains("\u{540d}\u{8bcd}")
+        let resolvedOptions = options.isEmpty && !isOpenKind ? [Option(key: "A", text: explanation)] : options
+        return normalizedQuestion(Question(prompt: prompt, options: resolvedOptions, answer: answer.isEmpty && !isOpenKind ? Set(["A"]) : answer, explanation: explanation, kind: kind))
     }
 
     private func isAIHeaderQuestion(_ prompt: String) -> Bool {
         let normalized = prompt.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        let strippedNumber = normalized.replacingOccurrences(of: #"^\d+[\.\、]\s*"#, with: "", options: .regularExpression)
+        let strippedNumber = normalized
+            .replacingOccurrences(of: #"^\d+[\.\s]*"#, with: "", options: .regularExpression)
+            .replacingOccurrences(of: #"^\d+[、．]\s*"#, with: "", options: .regularExpression)
         return strippedNumber.hasPrefix("mode:")
             || strippedNumber.contains("mode: validate")
             || strippedNumber.hasPrefix("题库:")
@@ -2421,7 +2472,11 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate, PHPicker
 
     private func conciseExplanation(_ raw: String, prompt: String, options: [Option], answer: Set<String>) -> String {
         let cleaned = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !cleaned.isEmpty && cleaned != "\u{6682}\u{65e0}\u{89e3}\u{6790}" {
+        let weakExplanation = cleaned.contains("\u{53c2}\u{8003}\u{7b54}\u{6848}")
+            || cleaned.contains("\u{5173}\u{952e}\u{770b}\u{6b63}\u{786e}\u{9009}\u{9879}")
+            || cleaned.contains("\u{6b63}\u{786e}\u{9009}\u{9879}\u{662f}")
+            || cleaned.contains("\u{6b63}\u{786e}\u{7b54}\u{6848}\u{662f}")
+        if !cleaned.isEmpty && cleaned != "\u{6682}\u{65e0}\u{89e3}\u{6790}" && !weakExplanation {
             return cleaned.count > 90 ? String(cleaned.prefix(90)) : cleaned
         }
         let selected = options
@@ -2429,9 +2484,9 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate, PHPicker
             .map { "\($0.key).\($0.text)" }
             .joined(separator: "\u{3001}")
         if !selected.isEmpty {
-            return "\u{53c2}\u{8003}\u{7b54}\u{6848}\u{ff1a}\(selected)\u{3002}\u{8bf7}\u{7ed3}\u{5408}\u{9898}\u{5e72}\u{77e5}\u{8bc6}\u{70b9}\u{590d}\u{6838}\u{3002}"
+            return "\u{6682}\u{65e0}\u{6709}\u{6548}\u{89e3}\u{6790}\u{ff1b}\u{53c2}\u{8003}\u{7b54}\u{6848} \(selected)\u{3002}"
         }
-        return "\u{6839}\u{636e}\u{9898}\u{5e72}\u{5173}\u{952e}\u{4fe1}\u{606f}\u{5224}\u{65ad}\u{ff0c}\u{7b54}\u{6848}\u{4ee5}\u{6821}\u{9a8c}\u{7ed3}\u{679c}\u{4e3a}\u{51c6}\u{3002}"
+        return "\u{6682}\u{65e0}\u{6709}\u{6548}\u{89e3}\u{6790}\u{ff0c}\u{53ef}\u{7528} AI \u{6821}\u{9a8c}\u{91cd}\u{65b0}\u{751f}\u{6210}\u{7b80}\u{6790}\u{3002}"
     }
 
     private func normalizedAnswerKeys(_ values: [String]?) -> Set<String> {
