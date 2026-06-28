@@ -64,6 +64,7 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate, PHPicker
         case questionJump = 11
         case aiValidationPreview = 12
         case paperDetail = 13
+        case aiValidationQuestionPreview = 14
     }
 
     private enum ButtonStyle {
@@ -103,6 +104,7 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate, PHPicker
     private var jumpSearchQuery = ""
     private var editSearchQuery = ""
     private var importDraftText = ""
+    private var isAIValidating = false
 
     private var papers: [Paper] = []
     private var activePaperIndex = 0
@@ -120,6 +122,7 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate, PHPicker
     private var editExplanationField: UITextView?
     private var editKindField: UITextField?
     private var aiValidationPaperIndex = 0
+    private var aiValidationPreviewIndex = 0
     private var aiValidationQuestions: [Question] = []
     private var selectedAnswers = Set<String>()
     private var answeredSelections: [String: Set<String>] = [:]
@@ -313,6 +316,8 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate, PHPicker
                 self.renderQuestionJumpPanel()
             case .aiValidationPreview:
                 self.renderAIValidationPreview()
+            case .aiValidationQuestionPreview:
+                self.renderAIValidationQuestionPreview()
             }
             self.view.layoutIfNeeded()
         }
@@ -339,7 +344,7 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate, PHPicker
         for item in items {
             let selected = item.0 == page ||
                 (page == .practice && item.0 == .library) ||
-                ((page == .paperDetail || page == .questionList || page == .questionEdit || page == .questionJump || page == .aiValidationPreview) && item.0 == .library)
+                ((page == .paperDetail || page == .questionList || page == .questionEdit || page == .questionJump || page == .aiValidationPreview || page == .aiValidationQuestionPreview) && item.0 == .library)
             let button = makeTabButton(icon: item.1, title: item.2, selected: selected)
             button.tag = item.0.rawValue
             button.addTarget(self, action: #selector(tabTapped(_:)), for: .touchUpInside)
@@ -417,8 +422,12 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate, PHPicker
         textView.textContainerInset = UIEdgeInsets(top: 14, left: 12, bottom: 14, right: 12)
         textView.text = importDraftText.isEmpty ? "1. \u{793a}\u{4f8b}\u{9898}\u{5e72} A. \u{9009}\u{9879}A B. \u{9009}\u{9879}B C. \u{9009}\u{9879}C D. \u{9009}\u{9879}D \u{7b54}\u{6848}\u{ff1a}A \u{89e3}\u{6790}\u{ff1a}\u{8fd9}\u{91cc}\u{662f}\u{89e3}\u{6790}" : importDraftText
         textView.heightAnchor.constraint(equalToConstant: 220).isActive = true
+        textView.delegate = self
         importTextView = textView
         contentStack.addArrangedSubview(textView)
+        let dismissKeyboard = makeButton("\u{6536}\u{8d77}\u{952e}\u{76d8}", style: .secondary)
+        dismissKeyboard.addTarget(self, action: #selector(dismissImportKeyboard), for: .touchUpInside)
+        contentStack.addArrangedSubview(dismissKeyboard)
         let parse = makeButton("\u{89e3}\u{6790}\u{4e3a}\u{65b0}\u{9898}\u{5e93}", style: .primary)
         parse.addTarget(self, action: #selector(importTapped), for: .touchUpInside)
         contentStack.addArrangedSubview(parse)
@@ -568,9 +577,14 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate, PHPicker
         let search = makeButton("\u{641c}\u{7d22}\u{9898}\u{76ee}", style: .secondary)
         search.addTarget(self, action: #selector(applyEditSearch), for: .touchUpInside)
         contentStack.addArrangedSubview(search)
-        let validate = makeButton("AI \u{6821}\u{9a8c}\u{672c}\u{9898}\u{5e93}", style: .secondary)
+        let validate = makeButton(isAIValidating ? "AI \u{6821}\u{9a8c}\u{4e2d}" : "AI \u{6821}\u{9a8c}\u{672c}\u{9898}\u{5e93}", style: isAIValidating ? .secondary : .primary)
+        validate.isEnabled = !isAIValidating
+        validate.alpha = isAIValidating ? 0.72 : 1
         validate.addTarget(self, action: #selector(aiValidatePaperTapped), for: .touchUpInside)
         contentStack.addArrangedSubview(validate)
+        if isAIValidating {
+            contentStack.addArrangedSubview(makeLoadingRow("\u{6b63}\u{5728}\u{6821}\u{9a8c}\u{9898}\u{578b}\u{3001}\u{7b54}\u{6848}\u{548c}\u{7b80}\u{77ed}\u{89e3}\u{6790}\u{2026}"))
+        }
         var rows: [UIView] = []
         for (index, question) in filteredEditableQuestions(for: paper) {
             rows.append(row("\(index + 1). \(question.prompt)", subtitle: "\(question.kind) \u{00b7} \u{7b54}\u{6848} \(question.answer.sorted().joined(separator: ","))", tag: index, action: #selector(questionEditTapped(_:))))
@@ -623,10 +637,11 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate, PHPicker
             return
         }
         let paper = papers[aiValidationPaperIndex]
+        let previewQuestions = mergedAIValidationQuestions(for: paper)
         addTopBar(title: "AI \u{6821}\u{9a8c}\u{9884}\u{89c8}", chipTitle: "\u{8fd4}\u{56de}", action: #selector(backToQuestionList))
         addEmptyState(
             "\u{5f85}\u{5e94}\u{7528}\u{4fee}\u{6b63}",
-            "\u{539f}\u{9898} \(paper.questions.count) \u{9898}\u{ff0c}AI \u{8fd4}\u{56de} \(aiValidationQuestions.count) \u{9898}\u{3002}\u{8bf7}\u{5148}\u{770b}\u{6982}\u{89c8}\u{ff0c}\u{786e}\u{8ba4}\u{540e}\u{518d}\u{5e94}\u{7528}\u{3002}"
+            "\u{539f}\u{9898} \(paper.questions.count) \u{9898}\u{ff0c}AI \u{8fd4}\u{56de} \(aiValidationQuestions.count) \u{6761}\u{3002}\u{5e94}\u{7528}\u{65f6}\u{6309}\u{539f}\u{9898}\u{5408}\u{5e76}\u{ff0c}\u{4e0d}\u{4f1a}\u{4e22}\u{5931}\u{539f}\u{6709}\u{9009}\u{9879}\u{3002}"
         )
         let apply = makeButton("\u{5e94}\u{7528} AI \u{4fee}\u{6b63}", style: .primary)
         apply.addTarget(self, action: #selector(applyAIValidation), for: .touchUpInside)
@@ -636,7 +651,7 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate, PHPicker
         contentStack.addArrangedSubview(cancel)
 
         var rows: [UIView] = []
-        for (index, question) in aiValidationQuestions.prefix(30).enumerated() {
+        for (index, question) in previewQuestions.prefix(30).enumerated() {
             let original = paper.questions.indices.contains(index) ? paper.questions[index] : nil
             let changed = original.map { old in
                 old.prompt != question.prompt
@@ -648,10 +663,48 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate, PHPicker
             let marker = changed ? "\u{5df2}\u{4fee}\u{6b63}" : "\u{65e0}\u{53d8}\u{5316}"
             rows.append(row("\(index + 1). \(question.prompt)", subtitle: "\(marker) · \(question.kind) · \u{7b54}\u{6848} \(question.answer.sorted().joined(separator: ","))", action: nil))
         }
-        addListGroup(rows)
-        if aiValidationQuestions.count > 30 {
-            addEmptyState("\u{53ea}\u{9884}\u{89c8}\u{524d} 30 \u{9898}", "\u{5e94}\u{7528}\u{65f6}\u{4f1a}\u{4fdd}\u{5b58}\u{5168}\u{90e8} \(aiValidationQuestions.count) \u{9898}\u{3002}")
+        for (index, previewRow) in rows.enumerated() {
+            previewRow.tag = index
+            previewRow.addGestureRecognizer(UITapGestureRecognizer(target: self, action: #selector(aiValidationPreviewTapped(_:))))
+            previewRow.isUserInteractionEnabled = true
         }
+        addListGroup(rows)
+        if previewQuestions.count > 30 {
+            addEmptyState("\u{53ea}\u{9884}\u{89c8}\u{524d} 30 \u{9898}", "\u{5e94}\u{7528}\u{65f6}\u{4f1a}\u{4fdd}\u{5b58}\u{5168}\u{90e8} \(previewQuestions.count) \u{9898}\u{3002}")
+        }
+    }
+
+    private func renderAIValidationQuestionPreview() {
+        guard papers.indices.contains(aiValidationPaperIndex) else {
+            setPage(.questionList, animated: false)
+            return
+        }
+        let paper = papers[aiValidationPaperIndex]
+        let merged = mergedAIValidationQuestions(for: paper)
+        guard merged.indices.contains(aiValidationPreviewIndex) else {
+            setPage(.aiValidationPreview, animated: false)
+            return
+        }
+        let revised = merged[aiValidationPreviewIndex]
+        let original = paper.questions.indices.contains(aiValidationPreviewIndex) ? paper.questions[aiValidationPreviewIndex] : revised
+        addTopBar(title: "\u{4fee}\u{6b63}\u{9884}\u{89c8} \(aiValidationPreviewIndex + 1)", chipTitle: "\u{8fd4}\u{56de}", action: #selector(backToAIValidationPreview))
+        addSectionHeader("\u{4fee}\u{6b63}\u{540e}")
+        addQuestionDetailCard(revised)
+        addSectionHeader("\u{539f}\u{9898}")
+        addQuestionDetailCard(original)
+    }
+
+    private func addQuestionDetailCard(_ question: Question) {
+        var views: [UIView] = [
+            makeText(question.kind, size: 13, weight: .bold, color: accentColor),
+            makeText(question.prompt, size: 17, weight: .semibold)
+        ]
+        if !question.options.isEmpty {
+            views.append(makeText(question.options.map { "\($0.key). \($0.text)" }.joined(separator: "\n"), size: 15, weight: .regular))
+        }
+        views.append(makeText("\u{7b54}\u{6848}\u{ff1a}\(question.answer.sorted().joined(separator: ","))", size: 15, weight: .semibold))
+        views.append(makeText("\u{89e3}\u{6790}\u{ff1a}\(question.explanation)", size: 14, weight: .regular, color: .secondaryLabel))
+        addCard(views)
     }
 
     private func renderQuestionJumpPanel() {
@@ -900,6 +953,22 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate, PHPicker
         container.addGestureRecognizer(tap)
         container.isUserInteractionEnabled = true
         contentStack.addArrangedSubview(container)
+    }
+
+    private func makeLoadingRow(_ text: String) -> UIView {
+        let spinner = UIActivityIndicatorView(style: .medium)
+        spinner.color = accentColor
+        spinner.startAnimating()
+        let label = makeText(text, size: 14, weight: .semibold, color: .secondaryLabel)
+        let row = UIStackView(arrangedSubviews: [spinner, label])
+        row.axis = .horizontal
+        row.alignment = .center
+        row.spacing = 10
+        row.layoutMargins = UIEdgeInsets(top: 12, left: 14, bottom: 12, right: 14)
+        row.isLayoutMarginsRelativeArrangement = true
+        row.backgroundColor = softGreenColor
+        row.layer.cornerRadius = 15
+        return row
     }
 
     private func paperRow(_ paper: Paper, index: Int) -> UIView {
@@ -1703,17 +1772,18 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate, PHPicker
     }
 
     @objc private func aiValidatePaperTapped() {
-        guard papers.indices.contains(editingPaperIndex) else { return }
+        guard papers.indices.contains(editingPaperIndex), !isAIValidating else { return }
         requestAIValidatePaper(papers[editingPaperIndex], index: editingPaperIndex)
     }
 
     @objc private func applyAIValidation() {
         guard papers.indices.contains(aiValidationPaperIndex), !aiValidationQuestions.isEmpty else { return }
         let paper = papers[aiValidationPaperIndex]
-        papers[aiValidationPaperIndex] = Paper(title: paper.title, source: "\(paper.source) AI validation", questions: aiValidationQuestions)
+        let mergedQuestions = mergedAIValidationQuestions(for: paper)
+        papers[aiValidationPaperIndex] = Paper(title: paper.title, source: "\(paper.source) AI validation", questions: mergedQuestions)
         activePaperIndex = aiValidationPaperIndex
         editingPaperIndex = aiValidationPaperIndex
-        order = Array(aiValidationQuestions.indices)
+        order = Array(mergedQuestions.indices)
         currentIndex = 0
         optionOrders.removeAll()
         selectedAnswers.removeAll()
@@ -1722,6 +1792,38 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate, PHPicker
         feedbackIsPositive = true
         savePersistedState()
         setPage(.questionList, animated: false)
+    }
+
+    @objc private func aiValidationPreviewTapped(_ sender: UITapGestureRecognizer) {
+        guard let index = sender.view?.tag, papers.indices.contains(aiValidationPaperIndex) else { return }
+        let previewQuestions = mergedAIValidationQuestions(for: papers[aiValidationPaperIndex])
+        guard previewQuestions.indices.contains(index) else { return }
+        aiValidationPreviewIndex = index
+        setPage(.aiValidationQuestionPreview, animated: false)
+    }
+
+    @objc private func backToAIValidationPreview() {
+        setPage(.aiValidationPreview, animated: false)
+    }
+
+    private func mergedAIValidationQuestions(for paper: Paper) -> [Question] {
+        paper.questions.enumerated().map { index, original in
+            let aiQuestion = aiValidationQuestions.indices.contains(index) ? aiValidationQuestions[index] : nil
+            return mergedQuestion(original: original, ai: aiQuestion)
+        }
+    }
+
+    private func mergedQuestion(original: Question, ai: Question?) -> Question {
+        guard let ai else { return original }
+        let originalIsText = isTextResponseQuestion(original)
+        let keepOriginalOptions = !original.options.isEmpty && !originalIsText
+        let options = keepOriginalOptions || ai.options.isEmpty ? original.options : ai.options
+        let answer = ai.answer.isEmpty ? original.answer : ai.answer
+        let kind = keepOriginalOptions ? original.kind : ai.kind
+        let prompt = ai.prompt.isEmpty || isAIHeaderQuestion(ai.prompt) ? original.prompt : ai.prompt
+        let rawExplanation = ai.explanation == "\u{6682}\u{65e0}\u{89e3}\u{6790}" ? original.explanation : ai.explanation
+        let explanation = conciseExplanation(rawExplanation, prompt: prompt, options: options, answer: answer)
+        return Question(prompt: prompt, options: options, answer: answer, explanation: explanation, kind: kind)
     }
 
     private func confirmDeletePaper(at index: Int) {
@@ -2044,13 +2146,29 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate, PHPicker
     @objc private func importTapped() {
         let text = importTextView?.text.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         importDraftText = text
+        view.endEditing(true)
         importQuestions(from: text, title: "\u{7c98}\u{8d34}\u{5bfc}\u{5165}\u{9898}\u{5e93}", source: "\u{7c98}\u{8d34}")
     }
 
     @objc private func aiImportTapped() {
         let text = importTextView?.text.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         importDraftText = text
+        view.endEditing(true)
         requestAIParse(text: text, title: "\u{7c98}\u{8d34}\u{5bfc}\u{5165}\u{9898}\u{5e93}", source: "\u{7c98}\u{8d34}", fallback: [])
+    }
+
+    @objc private func dismissImportKeyboard() {
+        importDraftText = importTextView?.text ?? importDraftText
+        view.endEditing(true)
+    }
+
+    private func loadImportDraft(_ text: String, title: String, source: String) {
+        importDraftText = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        feedbackText = importDraftText.isEmpty
+            ? "\u{672a}\u{8bfb}\u{53d6}\u{5230}\u{53ef}\u{7528}\u{6587}\u{672c}\u{ff0c}\u{8bf7}\u{6362}\u{4e2a}\u{6587}\u{4ef6}\u{6216}\u{4f7f}\u{7528}\u{56fe}\u{7247} OCR\u{3002}"
+            : "\(source) \u{5df2}\u{8bfb}\u{53d6}\u{5230}\u{5bfc}\u{5165}\u{6846}\u{ff0c}\u{8bf7}\u{68c0}\u{67e5}\u{540e}\u{9009}\u{62e9}\u{666e}\u{901a}\u{89e3}\u{6790}\u{6216} AI \u{8f85}\u{52a9}\u{89e3}\u{6790}\u{3002}"
+        feedbackIsPositive = !importDraftText.isEmpty
+        setPage(.importText, animated: false)
     }
 
     private func importQuestions(from text: String, title: String, source: String) {
@@ -2146,6 +2264,7 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate, PHPicker
             return
         }
         let text = aiValidationSourceText(for: paper)
+        isAIValidating = true
         feedbackText = "AI \u{6821}\u{9a8c}\u{4e2d}\u{ff0c}\u{4fdd}\u{6301}\u{5728}\u{5f53}\u{524d}\u{7f16}\u{8f91}\u{9875}\u{ff0c}\u{6210}\u{529f}\u{540e}\u{518d}\u{8fdb}\u{5165}\u{4fee}\u{6b63}\u{9884}\u{89c8}\u{3002}"
         feedbackIsPositive = true
         render()
@@ -2163,11 +2282,13 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate, PHPicker
                 guard let self else { return }
                 let questions = data.flatMap { self.decodeAIQuestions(from: $0) } ?? []
                 guard !questions.isEmpty else {
+                    self.isAIValidating = false
                     self.feedbackText = error == nil ? "\u{0041}\u{0049}\u{672a}\u{8fd4}\u{56de}\u{53ef}\u{7528}\u{4fee}\u{6b63}\u{7ed3}\u{679c}\u{3002}" : "\u{0041}\u{0049}\u{6821}\u{9a8c}\u{8bf7}\u{6c42}\u{5931}\u{8d25}\u{3002}"
                     self.feedbackIsPositive = false
                     self.render()
                     return
                 }
+                self.isAIValidating = false
                 self.aiValidationPaperIndex = index
                 self.aiValidationQuestions = questions
                 self.previewAIValidation()
@@ -2177,10 +2298,7 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate, PHPicker
 
     private func aiValidationSourceText(for paper: Paper) -> String {
         var lines: [String] = [
-            "mode: validate",
-            "\u{9898}\u{5e93}: \(paper.title)",
-            "\u{6765}\u{6e90}: \(paper.source)",
-            "\u{8bf7}\u{6821}\u{9a8c}\u{9898}\u{578b}\u{3001}\u{9009}\u{9879}\u{3001}\u{7b54}\u{6848}\u{548c}\u{89e3}\u{6790}\u{ff0c}\u{4fdd}\u{6301}\u{9898}\u{76ee}\u{6570}\u{91cf}\u{5c3d}\u{91cf}\u{4e00}\u{81f4}\u{3002}"
+            "\u{53ea}\u{6821}\u{9a8c}\u{4e0b}\u{9762}\u{7f16}\u{53f7}\u{9898}\u{76ee}\u{7684}\u{9898}\u{578b}\u{3001}\u{9009}\u{9879}\u{3001}\u{7b54}\u{6848}\u{548c}\u{7b80}\u{77ed}\u{89e3}\u{6790}\u{ff0c}\u{4e0d}\u{8981}\u{8fd4}\u{56de}\u{9898}\u{5e93}\u{540d}\u{3001}\u{6765}\u{6e90}\u{3001}mode \u{6216}\u{8bf4}\u{660e}\u{6587}\u{5b57}\u{3002}"
         ]
         for (index, question) in paper.questions.enumerated() {
             lines.append("\n\(index + 1). [\(question.kind)] \(question.prompt)")
@@ -2200,19 +2318,23 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate, PHPicker
     private func decodeAIQuestions(from data: Data) -> [Question] {
         if let response = try? JSONDecoder().decode(AIParseResponse.self, from: data) {
             if let questions = response.questions {
-                let mapped = questions.compactMap(mapAIQuestion)
+                let mapped = filteredAIQuestions(questions.compactMap(mapAIQuestion))
                 if !mapped.isEmpty {
                     return mapped
                 }
             }
             if let text = response.text {
-                return QuestionParser.parse(response.text ?? text)
+                return filteredAIQuestions(QuestionParser.parse(response.text ?? text))
             }
         }
         if let text = String(data: data, encoding: .utf8) {
-            return QuestionParser.parse(text)
+            return filteredAIQuestions(QuestionParser.parse(text))
         }
         return []
+    }
+
+    private func filteredAIQuestions(_ questions: [Question]) -> [Question] {
+        questions.filter { !isAIHeaderQuestion($0.prompt) }
     }
 
     private func mapAIQuestion(_ payload: AIQuestionPayload) -> Question? {
@@ -2230,12 +2352,15 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate, PHPicker
 
     private func isAIHeaderQuestion(_ prompt: String) -> Bool {
         let normalized = prompt.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        return normalized.hasPrefix("mode:")
-            || normalized.hasPrefix("题库:")
-            || normalized.hasPrefix("\u{9898}\u{5e93}\u{ff1a}")
-            || normalized.hasPrefix("来源:")
-            || normalized.hasPrefix("\u{6765}\u{6e90}\u{ff1a}")
-            || normalized.contains("\u{8bf7}\u{6821}\u{9a8c}\u{9898}\u{578b}")
+        let strippedNumber = normalized.replacingOccurrences(of: #"^\d+[\.\、]\s*"#, with: "", options: .regularExpression)
+        return strippedNumber.hasPrefix("mode:")
+            || strippedNumber.contains("mode: validate")
+            || strippedNumber.hasPrefix("题库:")
+            || strippedNumber.hasPrefix("\u{9898}\u{5e93}\u{ff1a}")
+            || strippedNumber.hasPrefix("来源:")
+            || strippedNumber.hasPrefix("\u{6765}\u{6e90}\u{ff1a}")
+            || (strippedNumber.contains("\u{9898}\u{5e93}") && strippedNumber.contains("\u{6765}\u{6e90}") && strippedNumber.contains("mode"))
+            || strippedNumber.contains("\u{8bf7}\u{6821}\u{9a8c}\u{9898}\u{578b}")
     }
 
     private func conciseExplanation(_ raw: String, prompt: String, options: [Option], answer: Set<String>) -> String {
@@ -2293,7 +2418,7 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate, PHPicker
                 guard let self, let image = object as? UIImage else { return }
                 self.recognizeText(from: image) { text in
                     DispatchQueue.main.async {
-                        self.importQuestions(from: text, title: "\u{56fe}\u{7247}\u{8bc6}\u{522b}\u{9898}\u{5e93}", source: "IMG OCR")
+                        self.loadImportDraft(text, title: "\u{56fe}\u{7247}\u{8bc6}\u{522b}\u{9898}\u{5e93}", source: "IMG OCR")
                     }
                 }
             }
@@ -2336,10 +2461,10 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate, PHPicker
         let ext = url.pathExtension.lowercased()
         if ext == "pdf" {
             let text = extractPDFText(from: url)
-            importQuestions(from: text, title: title, source: "PDF")
+            loadImportDraft(text, title: title, source: "PDF")
         } else {
             let text = (try? String(contentsOf: url, encoding: .utf8)) ?? ""
-            importQuestions(from: text, title: title, source: "TXT")
+            loadImportDraft(text, title: title, source: "TXT")
         }
     }
 

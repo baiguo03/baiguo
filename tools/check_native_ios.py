@@ -130,6 +130,11 @@ require("QuestionParser.parse" in view, "import does not use parser")
 require("struct Paper" in view, "paper library model missing")
 require("case library" in view, "library tab missing")
 require("UIDocumentPickerViewController" in view, "file import picker missing")
+require("dismissImportKeyboard" in view and "view.endEditing(true)" in view, "import page does not offer a way to dismiss the keyboard before AI parsing")
+document_picker_body = view.split("func documentPicker", 1)[1].split("private func extractPDFText", 1)[0]
+image_picker_body = view.split("func picker(_ picker: PHPickerViewController", 1)[1].split("private func recognizeText", 1)[0]
+require("importQuestions(" not in document_picker_body and "loadImportDraft" in document_picker_body, "file import still immediately creates a paper instead of filling the import draft")
+require("importQuestions(" not in image_picker_body and "loadImportDraft" in image_picker_body, "image OCR still immediately creates a paper instead of filling the import draft")
 require("import PDFKit" in view, "PDFKit import missing")
 require("import UniformTypeIdentifiers" in view, "UTType import missing")
 require("import PhotosUI" in view and "PHPickerViewController" in view, "image import picker missing")
@@ -146,12 +151,19 @@ require("parseEditedOptions" in view, "edited option parser is missing")
 require("referenceAnswerText" in view and "updatedOptions = isOpenEditedQuestion ? []" in view, "open edited questions are still saved as fake options")
 require("setPage(.importText, animated: false)" in view and "AI \\u{89e3}\\u{6790}\\u{4e2d}" in view, "AI import does not stay on the import page while running")
 require("aiValidatePaperTapped" in view and "requestAIValidatePaper" in view and "previewAIValidation" in view, "AI answer validation/review flow is missing")
+require("isAIValidating" in view and "UIActivityIndicatorView" in view and '"AI \\u{6821}\\u{9a8c}\\u{4e2d}"' in view, "AI validation does not show obvious in-progress feedback")
 require("isAIHeaderQuestion" in view and "compactMap(mapAIQuestion)" in view, "AI validation metadata questions are not filtered")
 require("conciseExplanation" in view and '"\\u{6682}\\u{65e0}\\u{89e3}\\u{6790}"' in view, "AI validation does not generate concise fallback explanations")
+require("mergedAIValidationQuestions" in view and "mergedQuestion(original: original, ai: aiQuestion)" in view, "AI validation should merge with original questions instead of replacing them")
+require("case aiValidationQuestionPreview" in view and "renderAIValidationQuestionPreview" in view and "aiValidationPreviewTapped" in view, "AI validation preview rows should open a detail view")
+apply_ai_body = view.split("@objc private func applyAIValidation()", 1)[1].split("private func confirmDeletePaper", 1)[0]
+require("questions: mergedQuestions" in apply_ai_body and "questions: aiValidationQuestions" not in apply_ai_body, "AI validation still replaces the whole paper with raw AI output")
 ai_validate_body = view.split("private func requestAIValidatePaper", 1)[1].split("private func aiValidationSourceText", 1)[0]
 require("setPage(.questionList, animated: false)" not in ai_validate_body, "AI validation should not jump away from the edit list while running or failing")
 require("render()" in ai_validate_body and "previewAIValidation()" in ai_validate_body, "AI validation should stay put until a successful preview is ready")
 require('mode: "validate"' in view and "validation" in view, "AI validation request does not identify validation mode")
+ai_source_body = view.split("private func aiValidationSourceText", 1)[1].split("private func previewAIValidation", 1)[0]
+require('"mode: validate"' not in ai_source_body and '"\\u{9898}\\u{5e93}:"' not in ai_source_body, "AI validation source text still includes metadata that can be parsed as fake questions")
 require((ROOT / "ios/QuizTool/QuizTool/Assets.xcassets/AppIcon.appiconset/Icon-60-60@3x.png").exists(), "missing 180px app icon")
 require((ROOT / "ios/QuizTool/QuizTool/Assets.xcassets/AppIcon.appiconset/Icon-1024.png").exists(), "missing 1024px app icon")
 
