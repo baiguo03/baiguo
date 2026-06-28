@@ -1598,11 +1598,11 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate, PHPicker
             papers[editingPaperIndex].questions.indices.contains(editingQuestionIndex)
         else { return }
         let oldQuestion = papers[editingPaperIndex].questions[editingQuestionIndex]
-        let prompt = editPromptField?.text.trimmingCharacters(in: .whitespacesAndNewlines) ?? oldQuestion.prompt
+        let prompt = editPromptField?.text?.trimmingCharacters(in: .whitespacesAndNewlines) ?? oldQuestion.prompt
         let options = parseEditedOptions(editOptionsField?.text ?? "")
         let answer = normalizeEditedAnswer(editAnswerField?.text ?? "")
-        let explanation = editExplanationField?.text.trimmingCharacters(in: .whitespacesAndNewlines) ?? oldQuestion.explanation
-        let kind = editKindField?.text.trimmingCharacters(in: .whitespacesAndNewlines) ?? oldQuestion.kind
+        let explanation = editExplanationField?.text?.trimmingCharacters(in: .whitespacesAndNewlines) ?? oldQuestion.explanation
+        let kind = editKindField?.text?.trimmingCharacters(in: .whitespacesAndNewlines) ?? oldQuestion.kind
         let isOpenEditedQuestion = kind.contains("\u{7b80}\u{7b54}") || kind.contains("\u{586b}\u{7a7a}") || kind.contains("\u{914d}\u{4f0d}") || kind.contains("\u{6848}\u{4f8b}") || kind.contains("\u{540d}\u{8bcd}")
         guard !prompt.isEmpty, (!options.isEmpty || isOpenEditedQuestion), (!answer.isEmpty || isOpenEditedQuestion) else {
             feedbackText = "\u{9898}\u{5e72}\u{3001}\u{9009}\u{9879}\u{548c}\u{7b54}\u{6848}\u{4e0d}\u{80fd}\u{4e3a}\u{7a7a}"
