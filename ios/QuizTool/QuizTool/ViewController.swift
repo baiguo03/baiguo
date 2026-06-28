@@ -4,7 +4,7 @@ import PhotosUI
 import UniformTypeIdentifiers
 import Vision
 
-final class ViewController: UIViewController, UIDocumentPickerDelegate, PHPickerViewControllerDelegate, UIGestureRecognizerDelegate, UITextViewDelegate {
+final class ViewController: UIViewController, UIDocumentPickerDelegate, PHPickerViewControllerDelegate, UIGestureRecognizerDelegate, UITextViewDelegate, UITextFieldDelegate {
     private struct Paper: Codable {
         let title: String
         let source: String
@@ -102,6 +102,7 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate, PHPicker
     private var searchQuery = ""
     private var jumpSearchQuery = ""
     private var editSearchQuery = ""
+    private var importDraftText = ""
 
     private var papers: [Paper] = []
     private var activePaperIndex = 0
@@ -414,7 +415,7 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate, PHPicker
         textView.backgroundColor = UIColor.white
         textView.layer.cornerRadius = 12
         textView.textContainerInset = UIEdgeInsets(top: 14, left: 12, bottom: 14, right: 12)
-        textView.text = "1. \u{793a}\u{4f8b}\u{9898}\u{5e72} A. \u{9009}\u{9879}A B. \u{9009}\u{9879}B C. \u{9009}\u{9879}C D. \u{9009}\u{9879}D \u{7b54}\u{6848}\u{ff1a}A \u{89e3}\u{6790}\u{ff1a}\u{8fd9}\u{91cc}\u{662f}\u{89e3}\u{6790}"
+        textView.text = importDraftText.isEmpty ? "1. \u{793a}\u{4f8b}\u{9898}\u{5e72} A. \u{9009}\u{9879}A B. \u{9009}\u{9879}B C. \u{9009}\u{9879}C D. \u{9009}\u{9879}D \u{7b54}\u{6848}\u{ff1a}A \u{89e3}\u{6790}\u{ff1a}\u{8fd9}\u{91cc}\u{662f}\u{89e3}\u{6790}" : importDraftText
         textView.heightAnchor.constraint(equalToConstant: 220).isActive = true
         importTextView = textView
         contentStack.addArrangedSubview(textView)
@@ -561,8 +562,12 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate, PHPicker
         addTopBar(title: "\u{7f16}\u{8f91}\u{9898}\u{76ee}", chipTitle: "\u{8fd4}\u{56de}", action: #selector(backToLibrary))
         addEmptyState(paper.title, "\(paper.questions.count) \u{9898}\u{ff0c}\u{70b9}\u{51fb}\u{5355}\u{9898}\u{53ef}\u{4fee}\u{6539}\u{9898}\u{5e72}\u{3001}\u{9009}\u{9879}\u{3001}\u{7b54}\u{6848}\u{548c}\u{89e3}\u{6790}\u{3002}")
         editSearchField = makeInput(placeholder: "\u{641c}\u{7d22}\u{9898}\u{53f7}\u{3001}\u{9898}\u{5e72}\u{3001}\u{7b54}\u{6848}\u{6216}\u{9898}\u{578b}", text: editSearchQuery, secure: false)
-        editSearchField?.addTarget(self, action: #selector(editSearchChanged(_:)), for: .editingChanged)
+        editSearchField?.returnKeyType = .search
+        editSearchField?.delegate = self
         if let editSearchField { contentStack.addArrangedSubview(editSearchField) }
+        let search = makeButton("\u{641c}\u{7d22}\u{9898}\u{76ee}", style: .secondary)
+        search.addTarget(self, action: #selector(applyEditSearch), for: .touchUpInside)
+        contentStack.addArrangedSubview(search)
         let validate = makeButton("AI \u{6821}\u{9a8c}\u{672c}\u{9898}\u{5e93}", style: .secondary)
         validate.addTarget(self, action: #selector(aiValidatePaperTapped), for: .touchUpInside)
         contentStack.addArrangedSubview(validate)
@@ -1503,6 +1508,21 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate, PHPicker
         render()
     }
 
+    @objc private func applyEditSearch() {
+        editSearchQuery = editSearchField?.text ?? ""
+        view.endEditing(true)
+        render()
+    }
+
+    func textFieldShouldReturn(_ textField: UITextField) -> Bool {
+        if textField === editSearchField {
+            applyEditSearch()
+            return false
+        }
+        textField.resignFirstResponder()
+        return true
+    }
+
     @objc private func saveAPIConfig() {
         apiEndpoint = normalizeAPIEndpoint(apiEndpointField?.text ?? "")
         apiKey = apiKeyField?.text?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
@@ -1841,9 +1861,13 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate, PHPicker
             return
         }
 
-        let updatedOptions = options.isEmpty ? [Option(key: "A", text: explanation.isEmpty ? "\u{67e5}\u{770b}\u{89e3}\u{6790}" : explanation)] : options
-        let updatedAnswer = answer.isEmpty ? Set(["A"]) : answer
-        let updatedQuestion = Question(prompt: prompt, options: updatedOptions, answer: updatedAnswer, explanation: explanation.isEmpty ? "\u{6682}\u{65e0}\u{89e3}\u{6790}" : explanation, kind: kind.isEmpty ? oldQuestion.kind : kind)
+        let referenceAnswerText = editAnswerField?.text?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let updatedOptions = isOpenEditedQuestion ? [] : options
+        let updatedAnswer = isOpenEditedQuestion ? Set<String>() : answer
+        let resolvedExplanation = explanation.isEmpty
+            ? (referenceAnswerText.isEmpty ? "\u{6682}\u{65e0}\u{89e3}\u{6790}" : referenceAnswerText)
+            : explanation
+        let updatedQuestion = Question(prompt: prompt, options: updatedOptions, answer: updatedAnswer, explanation: resolvedExplanation, kind: kind.isEmpty ? oldQuestion.kind : kind)
         var paper = papers[editingPaperIndex]
         var questions = paper.questions
         questions[editingQuestionIndex] = updatedQuestion
@@ -2019,11 +2043,13 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate, PHPicker
 
     @objc private func importTapped() {
         let text = importTextView?.text.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        importDraftText = text
         importQuestions(from: text, title: "\u{7c98}\u{8d34}\u{5bfc}\u{5165}\u{9898}\u{5e93}", source: "\u{7c98}\u{8d34}")
     }
 
     @objc private func aiImportTapped() {
         let text = importTextView?.text.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        importDraftText = text
         requestAIParse(text: text, title: "\u{7c98}\u{8d34}\u{5bfc}\u{5165}\u{9898}\u{5e93}", source: "\u{7c98}\u{8d34}", fallback: [])
     }
 
@@ -2050,6 +2076,7 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate, PHPicker
         optionOrders.removeAll()
         currentIndex = 0
         restoreSelectedAnswersForCurrentQuestion()
+        importDraftText = ""
         feedbackText = "\u{5df2}\u{5bfc}\u{5165} \(parsed.count) \u{9898}"
         feedbackIsPositive = true
         savePersistedState()
@@ -2082,7 +2109,7 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate, PHPicker
 
         feedbackText = "AI \u{89e3}\u{6790}\u{4e2d}\u{ff0c}\u{5b8c}\u{6210}\u{540e}\u{81ea}\u{52a8}\u{5bfc}\u{5165}\u{3002}"
         feedbackIsPositive = true
-        setPage(.library, animated: false)
+        setPage(.importText, animated: false)
 
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
@@ -2105,7 +2132,7 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate, PHPicker
                 } else {
                     self.feedbackText = error == nil ? "\u{0041}\u{0049}\u{672a}\u{8fd4}\u{56de}\u{53ef}\u{7528}\u{9898}\u{76ee}\u{3002}" : "\u{0041}\u{0049}\u{89e3}\u{6790}\u{8bf7}\u{6c42}\u{5931}\u{8d25}\u{3002}"
                     self.feedbackIsPositive = false
-                    self.setPage(.library, animated: false)
+                    self.setPage(.importText, animated: false)
                 }
             }
         }.resume()

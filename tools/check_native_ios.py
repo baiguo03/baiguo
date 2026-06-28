@@ -139,8 +139,12 @@ require("revealPaperDelete" in view and "CGAffineTransform(translationX: -82" in
 require("UILongPressGestureRecognizer" in view and "openPaperSwitchSheet" in view and "switchActivePaper" in view, "home long-press paper switching is missing")
 require("case questionList" in view and "case questionEdit" in view, "question editing pages are missing")
 require("renderQuestionList" in view and "renderQuestionEditor" in view and "saveQuestionEdit" in view, "question editing UI is missing")
-require("editSearchField" in view and "editSearchChanged" in view and "filteredEditableQuestions" in view, "question editing list is not searchable/scroll-friendly")
+require("editSearchField" in view and "textFieldShouldReturn" in view and "applyEditSearch" in view and "filteredEditableQuestions" in view, "question editing search is not submit-based/scroll-friendly")
+question_list_body = view.split("private func renderQuestionList()", 1)[1].split("private func renderQuestionEditor()", 1)[0]
+require(".editingChanged" not in question_list_body, "question edit search still filters before the user finishes typing")
 require("parseEditedOptions" in view, "edited option parser is missing")
+require("referenceAnswerText" in view and "updatedOptions = isOpenEditedQuestion ? []" in view, "open edited questions are still saved as fake options")
+require("setPage(.importText, animated: false)" in view and "AI \\u{89e3}\\u{6790}\\u{4e2d}" in view, "AI import does not stay on the import page while running")
 require("aiValidatePaperTapped" in view and "requestAIValidatePaper" in view and "previewAIValidation" in view, "AI answer validation/review flow is missing")
 require('mode: "validate"' in view and "validation" in view, "AI validation request does not identify validation mode")
 require((ROOT / "ios/QuizTool/QuizTool/Assets.xcassets/AppIcon.appiconset/Icon-60-60@3x.png").exists(), "missing 180px app icon")
