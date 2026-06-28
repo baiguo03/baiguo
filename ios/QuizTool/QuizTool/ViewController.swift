@@ -23,6 +23,10 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate, PHPicker
         let apiKey: String
         let answeredSelections: [String: [String]]?
         let textAnswers: [String: String]?
+        let showSequentialPractice: Bool?
+        let showRandomPractice: Bool?
+        let showWrongPracticeEntry: Bool?
+        let showEditEntry: Bool?
     }
 
     private struct AIParseRequest: Codable {
@@ -59,6 +63,7 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate, PHPicker
         case questionEdit = 10
         case questionJump = 11
         case aiValidationPreview = 12
+        case paperDetail = 13
     }
 
     private enum ButtonStyle {
@@ -88,6 +93,10 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate, PHPicker
     private var feedbackIsPositive = true
     private var autoNextEnabled = true
     private var shuffleOptionsEnabled = true
+    private var showSequentialPractice = true
+    private var showRandomPractice = true
+    private var showWrongPracticeEntry = true
+    private var showEditEntry = true
     private var apiEndpoint = ""
     private var apiKey = ""
     private var searchQuery = ""
@@ -96,6 +105,7 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate, PHPicker
 
     private var papers: [Paper] = []
     private var activePaperIndex = 0
+    private var detailPaperIndex = 0
     private var wrongQuestions: [Question] = []
     private var focusedPracticeQuestions: [Question]?
     private var order: [Int] = []
@@ -176,22 +186,25 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate, PHPicker
         let persistedData = defaults.data(forKey: storageKey) ?? defaults.data(forKey: legacyStorageKey)
         guard
             let data = persistedData,
-            let state = try? JSONDecoder().decode(AppState.self, from: data),
-            !state.papers.isEmpty
+            let state = try? JSONDecoder().decode(AppState.self, from: data)
         else { return }
         papers = state.papers
-        activePaperIndex = min(max(state.activePaperIndex, 0), papers.count - 1)
+        activePaperIndex = papers.isEmpty ? 0 : min(max(state.activePaperIndex, 0), papers.count - 1)
         wrongQuestions = state.wrongQuestions
         currentIndex = max(state.currentIndex, 0)
         modeTitle = state.modeTitle
         autoNextEnabled = state.autoNextEnabled
         shuffleOptionsEnabled = state.shuffleOptionsEnabled
+        showSequentialPractice = state.showSequentialPractice ?? true
+        showRandomPractice = state.showRandomPractice ?? true
+        showWrongPracticeEntry = state.showWrongPracticeEntry ?? true
+        showEditEntry = state.showEditEntry ?? true
         apiEndpoint = state.apiEndpoint
         apiKey = state.apiKey
         answeredSelections = (state.answeredSelections ?? [:]).mapValues { Set($0) }
         textAnswers = state.textAnswers ?? [:]
         let maxIndex = max(activeQuestions.count - 1, 0)
-        currentIndex = min(currentIndex, maxIndex)
+        currentIndex = activeQuestions.isEmpty ? 0 : min(currentIndex, maxIndex)
         order = activeQuestions.isEmpty ? [] : Array(activeQuestions.indices)
         restoreSelectedAnswersForCurrentQuestion()
         if defaults.data(forKey: storageKey) == nil {
@@ -211,7 +224,11 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate, PHPicker
             apiEndpoint: apiEndpoint,
             apiKey: apiKey,
             answeredSelections: answeredSelections.mapValues { $0.sorted() },
-            textAnswers: textAnswers
+            textAnswers: textAnswers,
+            showSequentialPractice: showSequentialPractice,
+            showRandomPractice: showRandomPractice,
+            showWrongPracticeEntry: showWrongPracticeEntry,
+            showEditEntry: showEditEntry
         )
         guard let data = try? JSONEncoder().encode(state) else { return }
         UserDefaults.standard.set(data, forKey: storageKey)
@@ -266,6 +283,8 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate, PHPicker
                 self.renderHome()
             case .library:
                 self.renderLibrary()
+            case .paperDetail:
+                self.renderPaperDetail()
             case .importText:
                 self.renderImport()
             case .wrong:
@@ -314,7 +333,7 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate, PHPicker
         for item in items {
             let selected = item.0 == page ||
                 (page == .practice && item.0 == .library) ||
-                ((page == .questionList || page == .questionEdit || page == .questionJump || page == .aiValidationPreview) && item.0 == .library)
+                ((page == .paperDetail || page == .questionList || page == .questionEdit || page == .questionJump || page == .aiValidationPreview) && item.0 == .library)
             let button = makeTabButton(icon: item.1, title: item.2, selected: selected)
             button.tag = item.0.rawValue
             button.addTarget(self, action: #selector(tabTapped(_:)), for: .touchUpInside)
@@ -325,22 +344,54 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate, PHPicker
     private func renderHome() {
         addTopBar(title: "李子", chipTitle: "\u{5bfc}\u{5165}", action: #selector(openImportPage))
         addSearchField()
-        addListGroup([
-            paperRow(activePaper, index: activePaperIndex),
-            row("\u{7ee7}\u{7eed}\u{7ec3}\u{4e60}", subtitle: "\(currentIndex + 1) / \(max(order.count, 1))", action: #selector(openCurrentPaper)),
-            row("\u{968f}\u{673a}\u{7ec3}\u{4e60}", subtitle: "\u{4ece}\u{5f53}\u{524d}\u{9898}\u{5e93}\u{6253}\u{4e71}\u{9898}\u{76ee}\u{987a}\u{5e8f}", action: #selector(openRandomPractice))
-        ])
+        guard !papers.isEmpty else {
+            addEmptyState("\u{8fd8}\u{6ca1}\u{6709}\u{9898}\u{5e93}", "\u{70b9}\u{53f3}\u{4e0a}\u{89d2}\u{5bfc}\u{5165}\u{ff0c}\u{53ef}\u{4ee5}\u{4ece} PDF\u{3001}TXT\u{3001}\u{56fe}\u{7247}\u{6216}\u{7c98}\u{8d34}\u{6587}\u{672c}\u{751f}\u{6210}\u{9898}\u{5e93}\u{3002}")
+            return
+        }
+        addListGroup(papers.indices.map { paperRow(papers[$0], index: $0) })
     }
 
     private func renderLibrary() {
         addTopBar(title: "\u{9898}\u{5e93}", chipTitle: "\u{5bfc}\u{5165}", action: #selector(openImportPage))
         addSearchField()
+        guard !papers.isEmpty else {
+            addEmptyState("\u{9898}\u{5e93}\u{5df2}\u{6e05}\u{7a7a}", "\u{70b9}\u{53f3}\u{4e0a}\u{89d2}\u{5bfc}\u{5165}\u{65b0}\u{9898}\u{5e93}\u{3002}")
+            return
+        }
         var rows: [UIView] = []
         for index in papers.indices {
             let paper = papers[index]
             rows.append(paperRow(paper, index: index))
         }
         addListGroup(rows)
+    }
+
+    private func renderPaperDetail() {
+        guard papers.indices.contains(detailPaperIndex) else {
+            setPage(.home, animated: false)
+            return
+        }
+        let paper = papers[detailPaperIndex]
+        addTopBar(title: paper.title, chipTitle: "\u{8fd4}\u{56de}", action: #selector(backToHome))
+        addEmptyState("\(paper.questions.count) \u{9898}", "\u{8fdb}\u{5165}\u{9898}\u{5e93}\u{540e}\u{518d}\u{9009}\u{62e9}\u{7ec3}\u{4e60}\u{65b9}\u{5f0f}\u{3002}\u{8fd9}\u{4e9b}\u{5165}\u{53e3}\u{53ef}\u{5728}\u{6211}\u{7684}\u{91cc}\u{5f00}\u{5173}\u{3002}")
+        var rows: [UIView] = []
+        if showSequentialPractice {
+            rows.append(row("\u{7ee7}\u{7eed} / \u{987a}\u{5e8f}\u{7ec3}\u{4e60}", subtitle: detailPaperIndex == activePaperIndex ? "\(currentIndex + 1) / \(max(order.count, 1))" : "\u{4ece}\u{7b2c} 1 \u{9898}\u{5f00}\u{59cb}", tag: detailPaperIndex, action: #selector(startSequentialFromDetail(_:))))
+        }
+        if showRandomPractice {
+            rows.append(row("\u{968f}\u{673a}\u{7ec3}\u{4e60}", subtitle: "\u{6253}\u{4e71}\u{5f53}\u{524d}\u{9898}\u{5e93}\u{9898}\u{76ee}\u{987a}\u{5e8f}", tag: detailPaperIndex, action: #selector(startRandomFromDetail(_:))))
+        }
+        if showWrongPracticeEntry {
+            rows.append(row("\u{9519}\u{9898}\u{7ec3}\u{4e60}", subtitle: wrongQuestions.isEmpty ? "\u{6682}\u{65e0}\u{9519}\u{9898}" : "\(wrongQuestions.count) \u{9898}\u{5f85}\u{5de9}\u{56fa}", action: #selector(startWrongPractice)))
+        }
+        if showEditEntry {
+            rows.append(row("\u{7f16}\u{8f91}\u{9898}\u{76ee}", subtitle: "\u{4fee}\u{6539}\u{9898}\u{5e72}\u{3001}\u{9009}\u{9879}\u{3001}\u{7b54}\u{6848}\u{548c}\u{89e3}\u{6790}", tag: detailPaperIndex, action: #selector(openEditorFromDetail(_:))))
+        }
+        if rows.isEmpty {
+            addEmptyState("\u{7ec3}\u{4e60}\u{5165}\u{53e3}\u{5df2}\u{5173}\u{95ed}", "\u{5230}\u{6211}\u{7684} - \u{7ec3}\u{4e60}\u{5165}\u{53e3}\u{5f00}\u{5173}\u{91cc}\u{6253}\u{5f00}\u{60f3}\u{7528}\u{7684}\u{529f}\u{80fd}\u{3002}")
+        } else {
+            addListGroup(rows)
+        }
     }
 
     private func renderImport() {
@@ -447,8 +498,11 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate, PHPicker
         addTopBar(title: "\u{6211}\u{7684}", chipTitle: nil, action: nil)
         contentStack.addArrangedSubview(iconSwitchRow(symbol: "\u{2192}", color: accentColor, title: "\u{7b54}\u{5bf9}\u{540e}\u{81ea}\u{52a8}\u{4e0b}\u{4e00}\u{9898}", subtitle: "\u{7b54}\u{5bf9}\u{76f4}\u{63a5}\u{5207}\u{9898}\u{ff0c}\u{7b54}\u{9519}\u{663e}\u{793a}\u{89e3}\u{6790}", isOn: autoNextEnabled, action: #selector(autoNextChanged(_:))))
         contentStack.addArrangedSubview(iconSwitchRow(symbol: "A", color: UIColor(red: 0.12, green: 0.47, blue: 0.90, alpha: 1), title: "\u{9009}\u{9879}\u{968f}\u{673a}\u{6392}\u{5e8f}", subtitle: "\u{8fd4}\u{56de}\u{540c}\u{9898}\u{65f6}\u{987a}\u{5e8f}\u{4fdd}\u{6301}\u{4e0d}\u{53d8}", isOn: shuffleOptionsEnabled, action: #selector(shuffleOptionsChanged(_:))))
+        contentStack.addArrangedSubview(iconSwitchRow(symbol: "1", color: UIColor(red: 0.15, green: 0.55, blue: 0.94, alpha: 1), title: "\u{663e}\u{793a}\u{987a}\u{5e8f}\u{7ec3}\u{4e60}", subtitle: "\u{9898}\u{5e93}\u{8be6}\u{60c5}\u{91cc}\u{663e}\u{793a}\u{7ee7}\u{7eed} / \u{987a}\u{5e8f}\u{5165}\u{53e3}", isOn: showSequentialPractice, action: #selector(showSequentialChanged(_:))))
+        contentStack.addArrangedSubview(iconSwitchRow(symbol: "\u{21c4}", color: UIColor(red: 0.97, green: 0.57, blue: 0.08, alpha: 1), title: "\u{663e}\u{793a}\u{968f}\u{673a}\u{7ec3}\u{4e60}", subtitle: "\u{9898}\u{5e93}\u{8be6}\u{60c5}\u{91cc}\u{663e}\u{793a}\u{968f}\u{673a}\u{7ec3}\u{4e60}\u{5165}\u{53e3}", isOn: showRandomPractice, action: #selector(showRandomChanged(_:))))
+        contentStack.addArrangedSubview(iconSwitchRow(symbol: "!", color: UIColor.systemRed, title: "\u{663e}\u{793a}\u{9519}\u{9898}\u{7ec3}\u{4e60}", subtitle: "\u{9898}\u{5e93}\u{8be6}\u{60c5}\u{91cc}\u{663e}\u{793a}\u{9519}\u{9898}\u{7ec3}\u{4e60}\u{5165}\u{53e3}", isOn: showWrongPracticeEntry, action: #selector(showWrongEntryChanged(_:))))
+        contentStack.addArrangedSubview(iconSwitchRow(symbol: "\u{270e}", color: UIColor.systemPurple, title: "\u{663e}\u{793a}\u{9898}\u{76ee}\u{7f16}\u{8f91}", subtitle: "\u{9898}\u{5e93}\u{8be6}\u{60c5}\u{91cc}\u{663e}\u{793a}\u{9898}\u{76ee}\u{7f16}\u{8f91}\u{5165}\u{53e3}", isOn: showEditEntry, action: #selector(showEditEntryChanged(_:))))
         contentStack.addArrangedSubview(iconInfoRow(symbol: "AI", color: UIColor(red: 0.06, green: 0.42, blue: 0.92, alpha: 1), title: "API \u{914d}\u{7f6e}", subtitle: apiEndpoint.isEmpty ? "\u{7528}\u{4e8e}\u{6587}\u{6863}\u{8bc6}\u{522b}\u{548c}\u{89e3}\u{6790}\u{589e}\u{5f3a}" : "\u{5df2}\u{914d}\u{7f6e}\u{63a5}\u{53e3}", action: #selector(openAPIConfig)))
-        contentStack.addArrangedSubview(iconInfoRow(symbol: "\u{21bb}", color: UIColor(red: 0.97, green: 0.57, blue: 0.08, alpha: 1), title: "\u{7ec3}\u{4e60}\u{6a21}\u{5f0f}", subtitle: "\u{987a}\u{5e8f}\u{7ec3}\u{4e60} / \u{968f}\u{673a}\u{7ec3}\u{4e60}", action: #selector(openPracticeMode)))
     }
 
     private func renderSearch() {
@@ -1424,6 +1478,10 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate, PHPicker
         setPage(.library, animated: false)
     }
 
+    @objc private func backToHome() {
+        setPage(.home, animated: false)
+    }
+
     @objc private func backToQuestionList() {
         setPage(.questionList, animated: false)
     }
@@ -1465,22 +1523,43 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate, PHPicker
     }
 
     @objc private func openCurrentPaper() {
+        guard papers.indices.contains(activePaperIndex) else { return }
         focusedPracticeQuestions = nil
         startPaper(index: activePaperIndex, random: false)
     }
 
     @objc private func openRandomPractice() {
+        guard papers.indices.contains(activePaperIndex) else { return }
         focusedPracticeQuestions = nil
         startPaper(index: activePaperIndex, random: true)
     }
 
     @objc private func paperTapped(_ sender: UITapGestureRecognizer) {
         guard let index = sender.view?.tag else { return }
-        if page == .home {
-            openCurrentPaper()
-            return
-        }
+        openPaperDetail(index)
+    }
+
+    private func openPaperDetail(_ index: Int) {
+        guard papers.indices.contains(index) else { return }
+        detailPaperIndex = index
+        setPage(.paperDetail, animated: false)
+    }
+
+    @objc private func startSequentialFromDetail(_ sender: UITapGestureRecognizer) {
+        guard let index = sender.view?.tag else { return }
+        focusedPracticeQuestions = nil
         startPaper(index: index, random: false)
+    }
+
+    @objc private func startRandomFromDetail(_ sender: UITapGestureRecognizer) {
+        guard let index = sender.view?.tag else { return }
+        focusedPracticeQuestions = nil
+        startPaper(index: index, random: true)
+    }
+
+    @objc private func openEditorFromDetail(_ sender: UITapGestureRecognizer) {
+        guard let index = sender.view?.tag else { return }
+        openQuestionList(for: index)
     }
 
     @objc private func paperLongPressed(_ sender: UILongPressGestureRecognizer) {
@@ -1617,26 +1696,29 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate, PHPicker
     }
 
     private func deletePaper(at index: Int) {
-        guard papers.indices.contains(index), papers.count > 1 else {
-            feedbackText = "\u{81f3}\u{5c11}\u{9700}\u{4fdd}\u{7559}\u{4e00}\u{4efd}\u{9898}\u{5e93}"
-            feedbackIsPositive = false
-            render()
-            return
-        }
+        guard papers.indices.contains(index) else { return }
         papers.remove(at: index)
-        if activePaperIndex >= papers.count {
+        if papers.isEmpty {
+            activePaperIndex = 0
+            detailPaperIndex = 0
+            currentIndex = 0
+            order = []
+            focusedPracticeQuestions = nil
+        } else if activePaperIndex >= papers.count {
             activePaperIndex = papers.count - 1
         } else if index < activePaperIndex {
             activePaperIndex -= 1
         }
-        currentIndex = 0
-        order = Array(activeQuestions.indices)
+        if !papers.isEmpty {
+            currentIndex = 0
+            order = Array(activeQuestions.indices)
+        }
         optionOrders.removeAll()
         restoreSelectedAnswersForCurrentQuestion()
         feedbackText = "\u{9898}\u{5e93}\u{5df2}\u{5220}\u{9664}"
         feedbackIsPositive = true
         savePersistedState()
-        render()
+        setPage(papers.isEmpty ? .home : page, animated: false)
     }
 
     private func startPaper(index: Int, random: Bool) {
@@ -2207,6 +2289,30 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate, PHPicker
         optionOrders.removeAll()
         restoreSelectedAnswersForCurrentQuestion()
         feedbackText = nil
+        savePersistedState()
+        render()
+    }
+
+    @objc private func showSequentialChanged(_ sender: UISwitch) {
+        showSequentialPractice = sender.isOn
+        savePersistedState()
+        render()
+    }
+
+    @objc private func showRandomChanged(_ sender: UISwitch) {
+        showRandomPractice = sender.isOn
+        savePersistedState()
+        render()
+    }
+
+    @objc private func showWrongEntryChanged(_ sender: UISwitch) {
+        showWrongPracticeEntry = sender.isOn
+        savePersistedState()
+        render()
+    }
+
+    @objc private func showEditEntryChanged(_ sender: UISwitch) {
+        showEditEntry = sender.isOn
         savePersistedState()
         render()
     }

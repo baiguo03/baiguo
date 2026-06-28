@@ -107,6 +107,15 @@ require("addFreeTextAnswer" in view and "currentTextAnswerView" in view, "short-
 require("addBlankInputs" in view and "blankAnswerFields" in view and "countBlankPlaceholders" in view, "fill-in questions do not render ordered blanks")
 require("isTextResponseQuestion" in view and "isFillBlankQuestion" in view, "open/fill question type detection missing")
 require("openRandomPractice" in view and "random: true" in view, "home random practice shortcut is missing")
+require("case paperDetail" in view and "renderPaperDetail" in view, "paper detail page is missing")
+require("showSequentialPractice" in view and "showRandomPractice" in view and "showWrongPracticeEntry" in view and "showEditEntry" in view, "practice entry switches are missing")
+require("startSequentialFromDetail" in view and "startRandomFromDetail" in view and "openEditorFromDetail" in view, "paper detail actions are not wired")
+require('"\\u{8fd8}\\u{6ca1}\\u{6709}\\u{9898}\\u{5e93}"' in view and "papers.isEmpty" in view, "empty library/home state is missing")
+require("guard papers.indices.contains(index) else { return }" in view and "papers.count > 1" not in view, "paper deletion still forbids deleting all papers")
+home_body = view.split("private func renderHome()", 1)[1].split("private func renderLibrary()", 1)[0]
+require("openCurrentPaper" not in home_body and "openRandomPractice" not in home_body, "home still exposes direct practice shortcuts")
+detail_body = view.split("private func renderPaperDetail()", 1)[1].split("private func renderImport()", 1)[0]
+require("showSequentialPractice" in detail_body and "showRandomPractice" in detail_body and "showWrongPracticeEntry" in detail_body and "showEditEntry" in detail_body, "paper detail does not respect practice entry switches")
 require("letterLabel" in view and "UIColor.tertiarySystemFill" in view, "selected option does not use iOS settings-like highlight")
 require("setContentCompressionResistancePriority(.defaultLow, for: .horizontal)" in view, "right-side row controls can drift left")
 require("QuestionParser.parse" in view, "import does not use parser")
