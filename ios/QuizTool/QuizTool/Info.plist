@@ -22,6 +22,15 @@
   <string>12</string>
   <key>LSRequiresIPhoneOS</key>
   <true/>
+  <key>NSAppTransportSecurity</key>
+  <dict>
+    <key>NSAllowsLocalNetworking</key>
+    <true/>
+  </dict>
+  <key>NSLocalNetworkUsageDescription</key>
+  <string>用于连接你本机或局域网内的题库后端，同步题库、解析结果和云端配置。</string>
+  <key>NSLocationWhenInUseUsageDescription</key>
+  <string>用于在需要时辅助识别你当前网络环境和所在区域，优化本地服务连接体验。</string>
   <key>UIUserInterfaceStyle</key>
   <string>Light</string>
   <key>UIApplicationSceneManifest</key>

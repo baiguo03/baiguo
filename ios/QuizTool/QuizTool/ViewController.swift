@@ -64,6 +64,15 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate, PHPicker
         let error: String?
     }
 
+    private struct AppRemoteConfigResponse: Codable {
+        let ok: Bool?
+        let updatedAt: String?
+        let appDisabled: Bool?
+        let disableMessage: String?
+        let forceCloudSync: Bool?
+        let error: String?
+    }
+
     private enum Page: Int {
         case home = 0
         case library = 1
@@ -120,6 +129,9 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate, PHPicker
     private var editSearchQuery = ""
     private var importDraftText = ""
     private var isAIValidating = false
+    private var appDisabled = false
+    private var appDisableMessage = ""
+    private var forceCloudSync = true
 
     private var papers: [Paper] = []
     private var activePaperIndex = 0
@@ -165,6 +177,7 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate, PHPicker
         configureLayout()
         configureSwipeGestures()
         render(animated: false)
+        refreshRemoteControlState()
     }
 
     private func configureSeedData() {
@@ -267,7 +280,12 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate, PHPicker
         tabStack.axis = .horizontal
         tabStack.distribution = .fillEqually
         tabStack.spacing = 0
-        tabStack.backgroundColor = UIColor.white.withAlphaComponent(0.96)
+        tabStack.backgroundColor = UIColor.white.withAlphaComponent(0.92)
+        tabStack.layer.cornerRadius = 24
+        tabStack.layer.shadowColor = UIColor.black.withAlphaComponent(0.12).cgColor
+        tabStack.layer.shadowOpacity = 1
+        tabStack.layer.shadowRadius = 18
+        tabStack.layer.shadowOffset = CGSize(width: 0, height: -2)
         tabStack.layoutMargins = UIEdgeInsets(top: 8, left: 10, bottom: 10, right: 10)
         tabStack.isLayoutMarginsRelativeArrangement = true
 
@@ -283,9 +301,9 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate, PHPicker
             contentStack.leadingAnchor.constraint(equalTo: scrollView.frameLayoutGuide.leadingAnchor, constant: 18),
             contentStack.trailingAnchor.constraint(equalTo: scrollView.frameLayoutGuide.trailingAnchor, constant: -18),
             contentStack.bottomAnchor.constraint(equalTo: scrollView.contentLayoutGuide.bottomAnchor, constant: -14),
-            tabStack.leadingAnchor.constraint(equalTo: view.leadingAnchor),
-            tabStack.trailingAnchor.constraint(equalTo: view.trailingAnchor),
-            tabStack.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor),
+            tabStack.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 14),
+            tabStack.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -14),
+            tabStack.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor, constant: -8),
             tabStack.heightAnchor.constraint(equalToConstant: 82)
         ])
     }
@@ -302,37 +320,41 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate, PHPicker
         let changes = {
             self.clearStack(self.contentStack)
             self.renderTabs()
-            switch self.page {
-            case .home:
-                self.renderHome()
-            case .library:
-                self.renderLibrary()
-            case .paperDetail:
-                self.renderPaperDetail()
-            case .importText:
-                self.renderImport()
-            case .wrong:
-                self.renderWrong()
-            case .profile:
-                self.renderProfile()
-            case .search:
-                self.renderSearch()
-            case .apiConfig:
-                self.renderAPIConfig()
-            case .practiceMode:
-                self.renderPracticeMode()
-            case .questionList:
-                self.renderQuestionList()
-            case .practice:
-                self.renderPractice()
-            case .questionEdit:
-                self.renderQuestionEditor()
-            case .questionJump:
-                self.renderQuestionJumpPanel()
-            case .aiValidationPreview:
-                self.renderAIValidationPreview()
-            case .aiValidationQuestionPreview:
-                self.renderAIValidationQuestionPreview()
+            if self.appDisabled {
+                self.renderDisabledState()
+            } else {
+                switch self.page {
+                case .home:
+                    self.renderHome()
+                case .library:
+                    self.renderLibrary()
+                case .paperDetail:
+                    self.renderPaperDetail()
+                case .importText:
+                    self.renderImport()
+                case .wrong:
+                    self.renderWrong()
+                case .profile:
+                    self.renderProfile()
+                case .search:
+                    self.renderSearch()
+                case .apiConfig:
+                    self.renderAPIConfig()
+                case .practiceMode:
+                    self.renderPracticeMode()
+                case .questionList:
+                    self.renderQuestionList()
+                case .practice:
+                    self.renderPractice()
+                case .questionEdit:
+                    self.renderQuestionEditor()
+                case .questionJump:
+                    self.renderQuestionJumpPanel()
+                case .aiValidationPreview:
+                    self.renderAIValidationPreview()
+                case .aiValidationQuestionPreview:
+                    self.renderAIValidationQuestionPreview()
+                }
             }
             self.view.layoutIfNeeded()
         }
@@ -344,12 +366,17 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate, PHPicker
     }
 
     private func setPage(_ nextPage: Page, animated: Bool = false) {
+        guard !appDisabled else {
+            render(animated: animated)
+            return
+        }
         page = nextPage
         render(animated: animated)
     }
 
     private func renderTabs() {
         clearStack(tabStack)
+        tabStack.isHidden = appDisabled
         let items: [(Page, String, String)] = [
             (.home, "house", "\u{9996}\u{9875}"),
             (.library, "square.grid.2x2", "\u{9898}\u{5e93}"),
@@ -365,6 +392,13 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate, PHPicker
             button.addTarget(self, action: #selector(tabTapped(_:)), for: .touchUpInside)
             tabStack.addArrangedSubview(button)
         }
+    }
+
+    private func renderDisabledState() {
+        addTitle("服务暂不可用", appDisableMessage.isEmpty ? "当前已被后端停用，请稍后再试。" : appDisableMessage)
+        let button = makeButton("重新检查状态", style: .primary)
+        button.addTarget(self, action: #selector(recheckRemoteControlState), for: .touchUpInside)
+        contentStack.addArrangedSubview(button)
     }
 
     private func renderHome() {
@@ -1510,14 +1544,14 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate, PHPicker
 
     private func makeTabButton(icon: String, title: String, selected: Bool) -> UIButton {
         let button = UIButton(type: .system)
-        let color = selected ? accentColor : UIColor.label
+        let color = selected ? accentColor : UIColor.secondaryLabel
         let image = UIImage(systemName: icon)?.withConfiguration(UIImage.SymbolConfiguration(pointSize: 19, weight: .regular))
         var configuration = UIButton.Configuration.plain()
         configuration.image = image
         configuration.title = title
         configuration.imagePlacement = .top
         configuration.imagePadding = 4
-        configuration.contentInsets = NSDirectionalEdgeInsets(top: 2, leading: 0, bottom: 2, trailing: 0)
+        configuration.contentInsets = NSDirectionalEdgeInsets(top: 6, leading: 0, bottom: 6, trailing: 0)
         configuration.baseForegroundColor = color
         configuration.titleTextAttributesTransformer = UIConfigurationTextAttributesTransformer { incoming in
             var outgoing = incoming
@@ -1527,7 +1561,8 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate, PHPicker
         button.configuration = configuration
         button.contentHorizontalAlignment = .center
         button.contentVerticalAlignment = .center
-        button.backgroundColor = UIColor.clear
+        button.backgroundColor = selected ? accentColor.withAlphaComponent(0.12) : UIColor.clear
+        button.layer.cornerRadius = 18
         button.tintColor = color
         button.imageView?.contentMode = .scaleAspectFit
         return button
@@ -1681,6 +1716,7 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate, PHPicker
         feedbackText = "\u{914d}\u{7f6e}\u{5df2}\u{4fdd}\u{5b58}"
         feedbackIsPositive = true
         setPage(.profile, animated: false)
+        refreshRemoteControlState()
     }
 
     private func persistAPIConfigFields() {
@@ -1712,6 +1748,16 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate, PHPicker
         return text
     }
 
+    private func appConfigURL() -> URL? {
+        let normalized = normalizeAPIEndpoint(apiEndpoint)
+        guard let url = URL(string: normalized), !normalized.isEmpty else { return nil }
+        var components = URLComponents(url: url, resolvingAgainstBaseURL: false)
+        components?.path = "/api/app-config"
+        components?.query = nil
+        components?.fragment = nil
+        return components?.url
+    }
+
     private func cloudStateURL() -> URL? {
         let normalized = normalizeAPIEndpoint(apiEndpoint)
         guard let url = URL(string: normalized), !normalized.isEmpty else { return nil }
@@ -1722,6 +1768,43 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate, PHPicker
         return components?.url
     }
 
+    @objc private func recheckRemoteControlState() {
+        refreshRemoteControlState()
+    }
+
+    private func refreshRemoteControlState() {
+        guard let url = appConfigURL() else {
+            refreshCloudStateIfPossible()
+            return
+        }
+        var request = URLRequest(url: url)
+        request.httpMethod = "GET"
+        if !apiKey.isEmpty {
+            request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
+        }
+        URLSession.shared.dataTask(with: request) { [weak self] data, _, error in
+            DispatchQueue.main.async {
+                guard let self else { return }
+                guard error == nil, let data, let config = try? JSONDecoder().decode(AppRemoteConfigResponse.self, from: data), config.ok != false else {
+                    self.refreshCloudStateIfPossible()
+                    return
+                }
+                self.appDisabled = config.appDisabled ?? false
+                self.appDisableMessage = (config.disableMessage ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+                self.forceCloudSync = config.forceCloudSync ?? true
+                if self.appDisabled {
+                    self.render(animated: false)
+                    return
+                }
+                if self.forceCloudSync {
+                    self.refreshCloudStateIfPossible()
+                } else {
+                    self.render(animated: false)
+                }
+            }
+        }.resume()
+    }
+
     @objc private func uploadCloudStateTapped() {
         persistAPIConfigFields()
         uploadCloudState(silent: false)
@@ -1730,6 +1813,15 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate, PHPicker
     @objc private func pullCloudStateTapped() {
         persistAPIConfigFields()
         pullCloudState()
+    }
+
+    private func refreshCloudStateIfPossible() {
+        pullCloudState(silent: true)
+    }
+
+    private func syncCloudStateAfterPaperChange() {
+        guard !appDisabled else { return }
+        uploadCloudState(silent: true)
     }
 
     private func uploadCloudState(silent: Bool) {
@@ -1767,11 +1859,13 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate, PHPicker
         }.resume()
     }
 
-    private func pullCloudState() {
+    private func pullCloudState(silent: Bool = false) {
         guard let url = cloudStateURL() else {
-            feedbackText = "\u{5148}\u{586b}\u{5199} API \u{5730}\u{5740}\u{3002}"
-            feedbackIsPositive = false
-            setPage(.apiConfig, animated: false)
+            if !silent {
+                feedbackText = "\u{5148}\u{586b}\u{5199} API \u{5730}\u{5740}\u{3002}"
+                feedbackIsPositive = false
+                setPage(.apiConfig, animated: false)
+            }
             return
         }
         var request = URLRequest(url: url)
@@ -1784,9 +1878,14 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate, PHPicker
                 guard let self else { return }
                 let response = data.flatMap { try? JSONDecoder().decode(CloudStateResponse.self, from: $0) }
                 guard error == nil, let cloudPapers = response?.papers, !cloudPapers.isEmpty else {
-                    self.feedbackText = response?.error ?? "\u{4e91}\u{7aef}\u{6682}\u{65e0}\u{53ef}\u{66f4}\u{65b0}\u{7684}\u{9898}\u{5e93}\u{3002}"
-                    self.feedbackIsPositive = false
-                    self.setPage(.apiConfig, animated: false)
+                    if silent, !self.papers.isEmpty {
+                        self.uploadCloudState(silent: true)
+                    }
+                    if !silent {
+                        self.feedbackText = response?.error ?? "\u{4e91}\u{7aef}\u{6682}\u{65e0}\u{53ef}\u{66f4}\u{65b0}\u{7684}\u{9898}\u{5e93}\u{3002}"
+                        self.feedbackIsPositive = false
+                        self.setPage(.apiConfig, animated: false)
+                    }
                     return
                 }
                 self.papers = cloudPapers
@@ -1797,9 +1896,13 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate, PHPicker
                 self.optionOrders.removeAll()
                 self.selectedAnswers.removeAll()
                 self.savePersistedState()
-                self.feedbackText = "\u{5df2}\u{4ece}\u{4e91}\u{7aef}\u{66f4}\u{65b0}\u{ff1a}\(response?.questionCount ?? cloudPapers.reduce(0) { $0 + $1.questions.count }) \u{9898}"
-                self.feedbackIsPositive = true
-                self.setPage(.library, animated: false)
+                if silent {
+                    self.render(animated: false)
+                } else {
+                    self.feedbackText = "\u{5df2}\u{4ece}\u{4e91}\u{7aef}\u{66f4}\u{65b0}\u{ff1a}\(response?.questionCount ?? cloudPapers.reduce(0) { $0 + $1.questions.count }) \u{9898}"
+                    self.feedbackIsPositive = true
+                    self.setPage(.library, animated: false)
+                }
             }
         }.resume()
     }
@@ -2045,6 +2148,7 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate, PHPicker
         feedbackText = "\u{9898}\u{5e93}\u{5df2}\u{5220}\u{9664}"
         feedbackIsPositive = true
         savePersistedState()
+        syncCloudStateAfterPaperChange()
         setPage(papers.isEmpty ? .home : page, animated: false)
     }
 
@@ -2167,6 +2271,7 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate, PHPicker
         feedbackText = "\u{9898}\u{76ee}\u{5df2}\u{4fdd}\u{5b58}"
         feedbackIsPositive = true
         savePersistedState()
+        syncCloudStateAfterPaperChange()
         setPage(.questionList, animated: false)
     }
 
@@ -2380,6 +2485,7 @@ final class ViewController: UIViewController, UIDocumentPickerDelegate, PHPicker
         feedbackText = "\u{5df2}\u{5bfc}\u{5165} \(parsed.count) \u{9898}"
         feedbackIsPositive = true
         savePersistedState()
+        syncCloudStateAfterPaperChange()
         setPage(.library, animated: false)
     }
 

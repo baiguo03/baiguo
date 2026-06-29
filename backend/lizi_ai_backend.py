@@ -22,6 +22,7 @@ LETTERS = "ABCDEFGH"
 REQUEST_LOGS = []
 REQUEST_LOG_LIMIT = 100
 CLOUD_STATE_FILE = Path(__file__).with_name("lizi_cloud_state.json")
+APP_CONFIG_FILE = Path(__file__).with_name("lizi_app_config.json")
 
 
 def record_request(path, status, summary, remote="-"):
@@ -72,6 +73,8 @@ def send_html(handler, status, html):
 def backend_status():
     lan_ips = get_lan_ips()
     api_paths = [f"http://{ip}:{PORT}/api/parse-questions" for ip in lan_ips]
+    cloud_state = load_cloud_state()
+    app_config = load_app_config()
     return {
         "ok": True,
         "host": HOST,
@@ -82,25 +85,36 @@ def backend_status():
         "parseEndpoints": api_paths,
         "healthUrl": f"http://127.0.0.1:{PORT}/health",
         "cloudStateConfigured": CLOUD_STATE_FILE.exists(),
+        "cloudPaperCount": cloud_state.get("paperCount", 0),
+        "cloudQuestionCount": cloud_state.get("questionCount", 0),
+        "appDisabled": bool(app_config.get("appDisabled")),
+    }
+
+
+def build_cloud_state(papers, source="app", device="", updated_at=None):
+    return {
+        "ok": True,
+        "updatedAt": updated_at or datetime.now().isoformat(timespec="seconds"),
+        "source": source,
+        "device": device,
+        "papers": papers,
+        "paperCount": len(papers),
+        "questionCount": sum(len(item.get("questions", [])) for item in papers if isinstance(item, dict)),
     }
 
 
 def load_cloud_state():
     if not CLOUD_STATE_FILE.exists():
-        return {
-            "ok": True,
-            "updatedAt": "",
-            "papers": [],
-            "paperCount": 0,
-            "questionCount": 0,
-        }
+        return build_cloud_state([], updated_at="")
     try:
         payload = json.loads(CLOUD_STATE_FILE.read_text(encoding="utf-8"))
         papers = payload.get("papers", [])
-        payload["ok"] = True
-        payload["paperCount"] = len(papers)
-        payload["questionCount"] = sum(len(item.get("questions", [])) for item in papers if isinstance(item, dict))
-        return payload
+        return build_cloud_state(
+            papers,
+            source=payload.get("source", "app"),
+            device=payload.get("device", ""),
+            updated_at=payload.get("updatedAt", ""),
+        )
     except Exception as exc:
         return {"ok": False, "error": str(exc), "papers": []}
 
@@ -109,17 +123,92 @@ def save_cloud_state(payload):
     papers = payload.get("papers")
     if not isinstance(papers, list):
         raise ValueError("missing papers")
-    cloud_state = {
-        "ok": True,
-        "updatedAt": datetime.now().isoformat(timespec="seconds"),
-        "source": payload.get("source", "app"),
-        "device": payload.get("device", ""),
-        "papers": papers,
-        "paperCount": len(papers),
-        "questionCount": sum(len(item.get("questions", [])) for item in papers if isinstance(item, dict)),
-    }
+    cloud_state = build_cloud_state(
+        papers,
+        source=payload.get("source", "app"),
+        device=payload.get("device", ""),
+    )
     CLOUD_STATE_FILE.write_text(json.dumps(cloud_state, ensure_ascii=False, indent=2), encoding="utf-8")
     return cloud_state
+
+
+def load_app_config():
+    defaults = {
+        "ok": True,
+        "updatedAt": "",
+        "appDisabled": False,
+        "disableMessage": "",
+        "forceCloudSync": True,
+    }
+    if not APP_CONFIG_FILE.exists():
+        return defaults
+    try:
+        payload = json.loads(APP_CONFIG_FILE.read_text(encoding="utf-8"))
+        defaults.update(payload)
+        defaults["ok"] = True
+        return defaults
+    except Exception as exc:
+        return {"ok": False, "error": str(exc), **defaults}
+
+
+def save_app_config(payload):
+    config = {
+        "ok": True,
+        "updatedAt": datetime.now().isoformat(timespec="seconds"),
+        "appDisabled": bool(payload.get("appDisabled")),
+        "disableMessage": (payload.get("disableMessage") or "").strip(),
+        "forceCloudSync": payload.get("forceCloudSync", True) is not False,
+    }
+    APP_CONFIG_FILE.write_text(json.dumps(config, ensure_ascii=False, indent=2), encoding="utf-8")
+    return config
+
+
+def normalize_imported_papers(payload):
+    title = (payload.get("title") or "云端上传题库").strip()
+    source = (payload.get("source") or "dashboard").strip()
+    text = normalize_text(payload.get("text", ""))
+    parsed = None
+    if text.startswith("{") or text.startswith("["):
+        try:
+            parsed = json.loads(text)
+        except Exception:
+            parsed = None
+
+    if isinstance(parsed, dict) and isinstance(parsed.get("papers"), list):
+        return parsed["papers"]
+    if isinstance(parsed, dict) and isinstance(parsed.get("questions"), list):
+        return [{
+            "title": parsed.get("title") or title,
+            "source": parsed.get("source") or source,
+            "questions": parsed["questions"],
+        }]
+    if isinstance(parsed, list):
+        if parsed and isinstance(parsed[0], dict) and isinstance(parsed[0].get("questions"), list):
+            return parsed
+        if parsed and isinstance(parsed[0], dict) and "prompt" in parsed[0]:
+            return [{"title": title, "source": source, "questions": parsed}]
+
+    if not text:
+        raise ValueError("missing text")
+    questions = local_parse(text)
+    if not questions:
+        raise ValueError("no questions parsed")
+    return [{"title": title, "source": source, "questions": questions}]
+
+
+def import_cloud_papers(payload):
+    replace = bool(payload.get("replace"))
+    imported_papers = normalize_imported_papers(payload)
+    existing_state = load_cloud_state()
+    existing_papers = existing_state.get("papers", []) if existing_state.get("ok", True) else []
+    merged_papers = imported_papers if replace else existing_papers + imported_papers
+    saved = save_cloud_state({
+        "source": payload.get("source", "dashboard"),
+        "device": payload.get("device", "backend-dashboard"),
+        "papers": merged_papers,
+    })
+    saved["importedCount"] = len(imported_papers)
+    return saved
 
 
 def dashboard_html():
@@ -541,6 +630,58 @@ D. 指纹
         <pre id="json" class="hidden">暂无结果</pre>
       </section>
     </div>
+
+    <section class="panel" style="margin-top:18px">
+      <div class="result-head">
+        <h2 style="margin:0">Cloud Control</h2>
+        <button class="secondary" id="refreshCloud">Refresh</button>
+      </div>
+
+      <div class="row" style="margin-top:14px">
+        <div>
+          <label for="cloudImportTitle">Paper title</label>
+          <input id="cloudImportTitle" value="后台上传题库">
+        </div>
+        <div>
+          <label for="cloudImportSource">Source</label>
+          <input id="cloudImportSource" value="dashboard">
+        </div>
+      </div>
+      <label for="cloudImportText">Import text or JSON</label>
+      <textarea id="cloudImportText">1. 下列哪项属于生命体征？ A. 体温 B. 身高 C. 发色 D. 指纹
+答案：A
+解析：体温属于常见生命体征。</textarea>
+      <label style="display:flex;align-items:center;gap:8px;margin-top:12px;color:var(--ink)">
+        <input id="replaceCloudLibraries" type="checkbox" style="width:auto">
+        Replace all cloud papers
+      </label>
+      <div class="actions">
+        <span class="hint">支持粘贴纯试题文本，也支持粘贴单个 paper / 整包 papers JSON。</span>
+        <button id="importCloudPaper">Upload to cloud</button>
+      </div>
+
+      <div class="row" style="margin-top:22px">
+        <div>
+          <label style="margin-top:0">Block app use</label>
+          <label style="display:flex;align-items:center;gap:8px;margin-top:8px;color:var(--ink)">
+            <input id="appDisabled" type="checkbox" style="width:auto">
+            Disable app from backend
+          </label>
+        </div>
+        <div>
+          <label for="disableMessage">Disable message</label>
+          <input id="disableMessage" value="当前服务暂停，请联系管理员。">
+        </div>
+      </div>
+      <div class="actions">
+        <span class="hint">启用后，App 下次启动或刷新配置时会进入停用页。</span>
+        <button id="saveAppControl">Save control</button>
+      </div>
+
+      <div id="cloudPapers" class="cards" style="margin-top:18px">
+        <div class="hint">Loading cloud papers...</div>
+      </div>
+    </section>
   </main>
 
   <script>
@@ -603,6 +744,106 @@ D. 指纹
       }
     }
 
+    function renderCloudLibraries(data) {
+      const papers = Array.isArray(data.papers) ? data.papers : [];
+      if (!papers.length) {
+        $("cloudPapers").innerHTML = `<div class="hint">No cloud papers yet.</div>`;
+        return;
+      }
+      $("cloudPapers").innerHTML = papers.map((paper, index) => {
+        const questions = Array.isArray(paper.questions) ? paper.questions : [];
+        const preview = questions.slice(0, 2).map((q) => escapeHtml(q.prompt || "")).join("<br>");
+        return `<article class="question">
+          <div class="qtitle">
+            <span>${index + 1}. ${escapeHtml(paper.title || "Untitled paper")}</span>
+            <span class="tag">${questions.length} questions</span>
+          </div>
+          <div class="explain">Source: ${escapeHtml(paper.source || "-")}</div>
+          <div class="explain">${preview || "No question preview"}</div>
+        </article>`;
+      }).join("");
+    }
+
+    async function loadCloudLibraries() {
+      try {
+        const response = await fetch("/api/cloud-state");
+        const data = await response.json();
+        renderCloudLibraries(data);
+      } catch (error) {
+        $("cloudPapers").innerHTML = `<div class="hint">${escapeHtml(error.message || "Failed to load cloud papers.")}</div>`;
+      }
+    }
+
+    async function loadAppControl() {
+      try {
+        const response = await fetch("/api/app-config");
+        const data = await response.json();
+        $("appDisabled").checked = Boolean(data.appDisabled);
+        $("disableMessage").value = data.disableMessage || "当前服务暂停，请联系管理员。";
+      } catch {
+        $("appDisabled").checked = false;
+      }
+    }
+
+    async function importCloudPaper() {
+      const button = $("importCloudPaper");
+      button.disabled = true;
+      $("message").textContent = "Uploading cloud paper...";
+      try {
+        const response = await fetch("/api/cloud-library-import", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            title: $("cloudImportTitle").value.trim(),
+            source: $("cloudImportSource").value.trim(),
+            text: $("cloudImportText").value,
+            replace: $("replaceCloudLibraries").checked,
+            device: "dashboard"
+          }),
+        });
+        const data = await response.json();
+        if (!response.ok) {
+          throw new Error(data.error || `HTTP ${response.status}`);
+        }
+        $("message").textContent = `Cloud saved: ${data.paperCount || 0} papers / ${data.questionCount || 0} questions`;
+        await loadCloudLibraries();
+        await loadStatus();
+        await loadRequests();
+      } catch (error) {
+        $("message").textContent = error.message || "Cloud upload failed";
+      } finally {
+        button.disabled = false;
+      }
+    }
+
+    async function saveAppControl() {
+      const button = $("saveAppControl");
+      button.disabled = true;
+      $("message").textContent = "Saving app control...";
+      try {
+        const response = await fetch("/api/app-config", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            appDisabled: $("appDisabled").checked,
+            disableMessage: $("disableMessage").value.trim(),
+            forceCloudSync: true
+          }),
+        });
+        const data = await response.json();
+        if (!response.ok) {
+          throw new Error(data.error || `HTTP ${response.status}`);
+        }
+        $("message").textContent = data.appDisabled ? "App has been disabled from backend." : "App access restored.";
+        await loadStatus();
+        await loadRequests();
+      } catch (error) {
+        $("message").textContent = error.message || "Failed to save app control";
+      } finally {
+        button.disabled = false;
+      }
+    }
+
     function renderResult(data) {
       $("json").textContent = JSON.stringify(data, null, 2);
       const questions = Array.isArray(data.questions) ? data.questions : [];
@@ -661,6 +902,12 @@ D. 指纹
       $("message").textContent = "已复制 App API 地址。";
     });
     $("runParse").addEventListener("click", parseQuestions);
+    $("refreshCloud").addEventListener("click", async () => {
+      await loadCloudLibraries();
+      await loadAppControl();
+    });
+    $("importCloudPaper").addEventListener("click", importCloudPaper);
+    $("saveAppControl").addEventListener("click", saveAppControl);
     $("viewCards").addEventListener("click", () => {
       $("viewCards").classList.add("active");
       $("viewJson").classList.remove("active");
@@ -676,6 +923,8 @@ D. 指纹
 
     loadStatus();
     loadRequests();
+    loadCloudLibraries();
+    loadAppControl();
     setInterval(loadRequests, 2000);
   </script>
 </body>
@@ -820,12 +1069,49 @@ class Handler(BaseHTTPRequestHandler):
         if self.path == "/api/requests":
             send_json(self, 200, {"requests": REQUEST_LOGS})
             return
+        if self.path == "/api/app-config":
+            record_request(
+                self.path,
+                200,
+                "app config fetch",
+                self.client_address[0] if self.client_address else "-",
+            )
+            send_json(self, 200, load_app_config())
+            return
         if self.path == "/api/cloud-state":
+            record_request(
+                self.path,
+                200,
+                "cloud state fetch",
+                self.client_address[0] if self.client_address else "-",
+            )
             send_json(self, 200, load_cloud_state())
             return
         send_json(self, 404, {"error": "not found"})
 
     def do_POST(self):
+        if self.path == "/api/app-config":
+            try:
+                length = int(self.headers.get("Content-Length", "0"))
+                body = self.rfile.read(length).decode("utf-8")
+                payload = json.loads(body or "{}")
+                saved = save_app_config(payload)
+                record_request(
+                    self.path,
+                    200,
+                    f"app config save: disabled={saved['appDisabled']}",
+                    self.client_address[0] if self.client_address else "-",
+                )
+                send_json(self, 200, saved)
+            except Exception as exc:
+                record_request(
+                    self.path,
+                    400,
+                    str(exc)[:180],
+                    self.client_address[0] if self.client_address else "-",
+                )
+                send_json(self, 400, {"ok": False, "error": str(exc)})
+            return
         if self.path == "/api/cloud-state":
             try:
                 length = int(self.headers.get("Content-Length", "0"))
@@ -836,6 +1122,28 @@ class Handler(BaseHTTPRequestHandler):
                     self.path,
                     200,
                     f"cloud save: {saved['paperCount']} papers, {saved['questionCount']} questions",
+                    self.client_address[0] if self.client_address else "-",
+                )
+                send_json(self, 200, saved)
+            except Exception as exc:
+                record_request(
+                    self.path,
+                    400,
+                    str(exc)[:180],
+                    self.client_address[0] if self.client_address else "-",
+                )
+                send_json(self, 400, {"ok": False, "error": str(exc)})
+            return
+        if self.path == "/api/cloud-library-import":
+            try:
+                length = int(self.headers.get("Content-Length", "0"))
+                body = self.rfile.read(length).decode("utf-8")
+                payload = json.loads(body or "{}")
+                saved = import_cloud_papers(payload)
+                record_request(
+                    self.path,
+                    200,
+                    f"cloud import: +{saved['importedCount']} papers, total {saved['paperCount']}",
                     self.client_address[0] if self.client_address else "-",
                 )
                 send_json(self, 200, saved)

@@ -10,6 +10,7 @@ __pycache__/
 *.log
 *.pyc
 backend/lizi_cloud_state.json
+backend/lizi_app_config.json
 *.xcarchive
 *.ipa
 *.zip
