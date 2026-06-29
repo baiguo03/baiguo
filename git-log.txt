@@ -1,0 +1,20 @@
+﻿67bc3e9 Improve AI question normalization and editing UX
+8d71e43 Add project handoff notes
+17163f8 Fix AI validation merge and preview flow
+7c51a3a Filter AI validation metadata and concise explanations
+3771dd0 Keep AI validation on edit page
+ace695f Fix edit search save and AI import flow
+b576809 Fix settings layout scrolling and AI config
+412f3c3 Add local AI backend
+c21f84b Move practice entries into paper detail
+c656e8a Add question navigation search and AI validation
+14670da Fix Swift optional text unwrapping
+e22b68f Add AI assisted import hook
+2e94c30 Improve answer input and jump navigation
+c94c950 improve quiz selection and library editing
+424f6ec polish lizi v11 quiz experience
+d4d4343 improve v11 import parsing and library actions
+a89fb1d persist imports and broaden v11 parsing
+cb4252b ship v11 usability and parser fixes
+5a18b5f tighten v10 practice layout and motion
+5ba8c3e match v10 browser layout

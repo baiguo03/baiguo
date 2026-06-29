@@ -5,6 +5,12 @@ node_modules/
 dist/
 build/
 DerivedData/
+outputs/
+__pycache__/
+*.log
+*.pyc
+backend/lizi_cloud_state.json
 *.xcarchive
 *.ipa
+*.zip
 .DS_Store

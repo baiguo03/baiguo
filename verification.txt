@@ -1,0 +1,9 @@
+﻿Verification commands run before packaging:
+- tools/check_native_ios.py: passed
+- tools/check_question_parser.py: passed
+- tools/check_app_files.py: passed
+- tools/check_backend.py: passed
+- python -m py_compile backend/lizi_ai_backend.py: passed
+- git diff --check: passed
+
+Latest commit before package: 67bc3e9 Improve AI question normalization and editing UX

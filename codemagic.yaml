@@ -1,4 +1,53 @@
 workflows:
+  ios-trollstore-ipa:
+    name: iOS TrollStore IPA Build
+    max_build_duration: 60
+    instance_type: mac_mini_m2
+    environment:
+      vars:
+        XCODE_PROJECT: "ios/QuizTool/QuizTool.xcodeproj"
+        XCODE_SCHEME: "QuizTool"
+        BUNDLE_ID: "app.calcite4884.lyra3161"
+    scripts:
+      - name: Verify app files
+        script: |
+          test -f ios/QuizTool/QuizTool/ViewController.swift
+          test -f ios/QuizTool/QuizTool/QuestionParser.swift
+          test -f ios/QuizTool/QuizTool/Info.plist
+          grep -q "李子" ios/QuizTool/QuizTool/Info.plist
+          test -f ios/QuizTool/QuizTool/Assets.xcassets/AppIcon.appiconset/Icon-60-60@3x.png
+      - name: Build unsigned device app
+        script: |
+          set -e
+          xcodebuild \
+            -project "$XCODE_PROJECT" \
+            -scheme "$XCODE_SCHEME" \
+            -configuration Release \
+            -sdk iphoneos \
+            -derivedDataPath build/DerivedData \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            DEVELOPMENT_TEAM="" \
+            PRODUCT_BUNDLE_IDENTIFIER="$BUNDLE_ID" \
+            clean build
+      - name: Package TrollStore IPA
+        script: |
+          set -e
+          APP_PATH=$(find build/DerivedData/Build/Products/Release-iphoneos -maxdepth 1 -name "*.app" -print -quit)
+          if [ -z "$APP_PATH" ]; then
+            echo "No .app bundle found"
+            exit 1
+          fi
+          rm -rf build/trollstore build/ipa
+          mkdir -p build/trollstore/Payload build/ipa
+          cp -R "$APP_PATH" build/trollstore/Payload/Lizi.app
+          /usr/bin/codesign --force --sign - --timestamp=none build/trollstore/Payload/Lizi.app || true
+          (cd build/trollstore && /usr/bin/zip -qry ../ipa/Lizi-TrollStore.ipa Payload)
+          /usr/bin/unzip -l build/ipa/Lizi-TrollStore.ipa | grep -q "Payload/Lizi.app/Info.plist"
+    artifacts:
+      - build/ipa/Lizi-TrollStore.ipa
+
   ios-ipa:
     name: iOS IPA Build
     max_build_duration: 60

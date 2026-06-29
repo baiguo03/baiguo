@@ -40,16 +40,24 @@ export function saveApiConfig(config) {
 
 export async function testApiConnection(config) {
   if (!config.endpoint) return { ok: false, message: "请填写 API 地址" };
-  if (!config.apiKey) return { ok: false, message: "请填写 API Key" };
 
   try {
+    const headers = {
+      "Content-Type": "application/json",
+    };
+    if (config.apiKey) {
+      headers.Authorization = `Bearer ${config.apiKey}`;
+    }
     const response = await fetch(config.endpoint, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${config.apiKey}`,
-      },
-      body: JSON.stringify({ model: config.model, input: "ping" }),
+      headers,
+      body: JSON.stringify({
+        model: config.model,
+        title: "连接测试",
+        source: "app-settings",
+        text: "1. 连接测试题\nA. 正常\n答案：A",
+        mode: "parse",
+      }),
     });
     return {
       ok: response.ok,
